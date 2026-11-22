@@ -15,7 +15,7 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 3.0rem; padding-bottom: 1.5rem; max-width: 900px; }
+    .block-container { padding-top: 2.5rem; padding-bottom: 1.5rem; max-width: 900px; }
     div[data-testid="stMetric"] {
         background-color: #f8f9fa;
         border: 1px solid #e9ecef;
