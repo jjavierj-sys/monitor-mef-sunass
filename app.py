@@ -21,7 +21,6 @@ st.markdown("""
         padding: 12px 14px;
         border-radius: 10px;
     }
-    /* Permite que los textos largos en tablas se lean completos en varias líneas */
     table td, table th {
         white-space: normal !important;
         word-wrap: break-word !important;
@@ -50,9 +49,9 @@ def conectar_gsheets():
 def mapear_unidad(meta):
     m = str(meta).strip()
     if m == "1":
-        return "SRT (PP082)"
+        return "SRT"
     elif m == "61":
-        return "SDEM (APNOP)"
+        return "SDEM"
     return f"Meta {m}"
 
 @st.cache_data(ttl=60)
@@ -73,7 +72,6 @@ def leer_pestana(nombre):
         df['Meta'] = partes.get(0, '').astype(str).str.strip()
         df['Fuente'] = partes.get(1, '').astype(str).str.strip()
         df['Generica'] = partes.get(2, '').astype(str).str.strip()
-        # Conservar EXCLUSIVAMENTE las metas de la DRE (1 = SRT, 61 = SDEM)
         df = df[df['Meta'].isin(['1', '61'])].copy()
         df['Unidad'] = df['Meta'].apply(mapear_unidad)
 
@@ -106,30 +104,33 @@ fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, label_visibility="collapsed")
 
-# Filtros rápidos exclusivos de la DRE (SRT y SDEM)
+# Filtros rápidos por Unidad Orgánica, Fuente y Genérica
 f1, f2, f3 = st.columns(3)
 unidad_opt = f1.selectbox(
-    "Subdirección DRE",
-    ["Total DRE (SRT + SDEM)", "SRT (Meta 1 - PP082)", "SDEM (Meta 61 - APNOP)"],
+    "Unidad Orgánica",
+    ["DRE (Global)", "SRT", "SDEM"],
     index=0
 )
 fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], index=0)
 gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3"], index=0)
 
 def filtrar_unidad(df):
-    if unidad_opt == "SRT (Meta 1 - PP082)":
-        return df[df['Meta'] == '1']
-    elif unidad_opt == "SDEM (Meta 61 - APNOP)":
-        return df[df['Meta'] == '61']
+    if unidad_opt == "SRT":
+        return df[df['Unidad'] == "SRT"]
+    elif unidad_opt == "SDEM":
+        return df[df['Unidad'] == "SDEM"]
     return df
 
-df_view = filtrar_unidad(df_cons[df_cons['Fecha'] == fecha_sel].copy())
+# Base filtrada por Fecha, Fuente y Genérica (para construir las 3 barras del gráfico DRE)
+df_fecha = df_cons[df_cons['Fecha'] == fecha_sel].copy()
 if fuente_opt != "Todas":
-    df_view = df_view[df_view['Fuente'] == fuente_opt]
+    df_fecha = df_fecha[df_fecha['Fuente'] == fuente_opt]
 if gen_opt != "Todas":
-    df_view = df_view[df_view['Generica'] == gen_opt]
+    df_fecha = df_fecha[df_fecha['Generica'] == gen_opt]
 
-# 4 KPIs Principales (2x2 adaptado a celular)
+df_view = filtrar_unidad(df_fecha)
+
+# 4 KPIs Principales
 pim_tot = df_view['PIM'].sum()
 dev_tot = df_view['Devengado'].sum()
 dif_dev = df_view['Dif_Devengado'].sum()
@@ -137,7 +138,7 @@ pct_tot = (dev_tot / pim_tot * 100) if pim_tot > 0 else 0.0
 saldo_tot = pim_tot - dev_tot
 
 k1, k2 = st.columns(2)
-k1.metric("PIM Total DRE", f"{pim_tot:,.2f}")
+k1.metric(f"PIM {unidad_opt}", f"{pim_tot:,.2f}")
 k2.metric("Devengado", f"{dev_tot:,.2f}", f"{dif_dev:+,.2f} hoy" if abs(dif_dev) > 0 else "Sin cambio hoy")
 
 k3, k4 = st.columns(2)
@@ -145,7 +146,7 @@ k3.metric("% Ejecución", f"{pct_tot:.2f}%")
 k4.metric("Saldo (PIM - Dev)", f"{saldo_tot:,.2f}")
 
 tab_resumen, tab_movs, tab_mes = st.tabs([
-    "📌 Resumen DRE",
+    "📌 Resumen",
     "⚡ Movimientos Hoy",
     "📅 Mensual"
 ])
@@ -154,46 +155,47 @@ with tab_resumen:
     if df_view.empty:
         st.warning("Sin datos para los filtros seleccionados.")
     else:
-        res = df_view.groupby(["Unidad", "Fuente", "Generica"], as_index=False)[
-            ["PIM", "Certificacion", "Devengado", "Dif_Devengado"]
+        # Tabla limpia agrupada unívocamente por Unidad Orgánica y Genérica (sin Dif_Devengado)
+        res = df_view.groupby(["Unidad", "Generica"], as_index=False)[
+            ["PIM", "Certificacion", "Devengado"]
         ].sum()
         res["%Ejec."] = res.apply(lambda r: (r["Devengado"] / r["PIM"] * 100) if r["PIM"] > 0 else 0.0, axis=1)
-        res["Grupo"] = res["Unidad"] + " | " + res["Fuente"] + " | " + res["Generica"]
 
         tot_row = pd.DataFrame([{
-            "Grupo": "TOTAL SELECCIÓN",
+            "Unidad": f"TOTAL {unidad_opt}",
+            "Generica": "",
             "PIM": res["PIM"].sum(),
             "Certificacion": res["Certificacion"].sum(),
             "Devengado": res["Devengado"].sum(),
-            "%Ejec.": pct_tot,
-            "Dif_Devengado": res["Dif_Devengado"].sum()
+            "%Ejec.": pct_tot
         }])
-        tabla_res = pd.concat([res[["Grupo", "PIM", "Certificacion", "Devengado", "%Ejec.", "Dif_Devengado"]], tot_row], ignore_index=True)
+        tabla_res = pd.concat([res[["Unidad", "Generica", "PIM", "Certificacion", "Devengado", "%Ejec."]], tot_row], ignore_index=True)
 
         def fmt_cero_blanco(v, dec=2, suf=""):
             return "" if abs(v) < 1e-6 else f"{v:,.{dec}f}{suf}"
-
-        def fmt_var_blanco(v):
-            return "" if abs(v) < 1e-6 else f"{v:+,.2f}"
-
-        def color_var(v):
-            if abs(v) < 1e-6:
-                return ""
-            return "color: #0052CC; font-weight: bold;" if v > 0 else "color: #D93025; font-weight: bold;"
 
         styler_res = tabla_res.style.format({
             "PIM": lambda x: fmt_cero_blanco(x),
             "Certificacion": lambda x: fmt_cero_blanco(x),
             "Devengado": lambda x: fmt_cero_blanco(x),
-            "%Ejec.": lambda x: fmt_cero_blanco(x, 2, "%"),
-            "Dif_Devengado": fmt_var_blanco
-        }).map(color_var, subset=["Dif_Devengado"])
+            "%Ejec.": lambda x: fmt_cero_blanco(x, 2, "%")
+        })
 
-        # st.table envuelve el texto en varias líneas sin truncar nunca
         st.table(styler_res)
 
-        st.caption("Ejecución por Subdirección y Fuente (PIM vs. Devengado)")
-        chart_df = res.set_index("Grupo")[["PIM", "Devengado"]]
+        # Gráfico limpio PIM vs Devengado por Unidad Orgánica (3 barras si es DRE, 1 si es SRT/SDEM)
+        st.caption("Ejecución por Unidad Orgánica (PIM vs. Devengado)")
+        if unidad_opt == "DRE (Global)":
+            g_unidades = df_fecha.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
+            g_dre = pd.DataFrame([{
+                "Unidad": "DRE (Global)",
+                "PIM": df_fecha["PIM"].sum(),
+                "Devengado": df_fecha["Devengado"].sum()
+            }])
+            chart_df = pd.concat([g_dre, g_unidades], ignore_index=True).set_index("Unidad")
+        else:
+            chart_df = df_view.groupby("Unidad")[["PIM", "Devengado"]].sum()
+
         st.bar_chart(chart_df, height=260)
 
 with tab_movs:
@@ -212,7 +214,7 @@ with tab_movs:
             val_dif = row[col_dif]
             if abs(val_dif) >= 0.01:
                 movs.append({
-                    "Subdirección": f"{row['Unidad']} | {row['Fuente']} | {row['Generica']}",
+                    "Unidad": f"{row['Unidad']} | {row['Fuente']} | {row['Generica']}",
                     "Específica": row["EspecificaCompleta"],
                     "Rubro": nombre_etapa,
                     "Acumulado": row[col_act],
@@ -236,7 +238,6 @@ with tab_movs:
             "Variación": "{:+,.2f}"
         }).map(color_mov, subset=["Variación"])
 
-        # st.table muestra el nombre completo de la específica en varias líneas
         st.table(styler_mov)
 
 with tab_mes:
@@ -273,3 +274,7 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True
 )
+
+
+
+    
