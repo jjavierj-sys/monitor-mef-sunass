@@ -102,18 +102,38 @@ if df_cons.empty:
     st.stop()
 
 fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
-with col_fec:
-    fecha_sel = st.selectbox("Fecha de corte", fechas, label_visibility="collapsed")
 
-# Filtros rápidos por Unidad Orgánica, Fuente y Genérica
-f1, f2, f3 = st.columns(3)
+# Inicializar estado de filtros para el botón limpiador
+if "fecha_sel" not in st.session_state or st.session_state.fecha_sel not in fechas:
+    st.session_state.fecha_sel = fechas[0]
+if "unidad_opt" not in st.session_state:
+    st.session_state.unidad_opt = "DRE (Global)"
+if "gen_opt" not in st.session_state:
+    st.session_state.gen_opt = "Todas"
+
+def limpiar_filtros():
+    st.session_state.fecha_sel = fechas[0]
+    st.session_state.unidad_opt = "DRE (Global)"
+    st.session_state.gen_opt = "Todas"
+
+with col_fec:
+    fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
+
+# Filtros rápidos por Unidad Orgánica, Genérica y botón Limpiador
+f1, f2, f3 = st.columns([2, 2, 1.3])
 unidad_opt = f1.selectbox(
     "Unidad Orgánica",
     ["DRE (Global)", "SRT", "SDEM"],
-    index=0
+    key="unidad_opt"
 )
-fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], index=0)
-gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3"], index=0)
+gen_opt = f2.selectbox(
+    "Genérica",
+    ["Todas", "2.1", "2.3"],
+    key="gen_opt"
+)
+with f3:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+    st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
 
 def filtrar_unidad(df):
     if unidad_opt == "SRT":
@@ -122,22 +142,18 @@ def filtrar_unidad(df):
         return df[df['Unidad'] == "SDEM"]
     return df
 
-# Base filtrada por Fecha, Fuente y Genérica (para construir las 3 barras del gráfico DRE)
+# Base filtrada por Fecha y Genérica
 df_fecha = df_cons[df_cons['Fecha'] == fecha_sel].copy()
-if fuente_opt != "Todas":
-    df_fecha = df_fecha[df_fecha['Fuente'] == fuente_opt]
 if gen_opt != "Todas":
     df_fecha = df_fecha[df_fecha['Generica'].astype(str).str.startswith(gen_opt)]
 
 df_view = filtrar_unidad(df_fecha)
 
-# 4 KPIs Principales (si la combinación no cargó aún hoy en MEF_Consolidado_Unico, toma su último corte válido)
+# 4 KPIs Principales (con respaldo automático al último corte válido si hoy está vacío)
 if df_view.empty or df_view['PIM'].sum() == 0:
     df_hist_comb = filtrar_unidad(df_cons.copy())
-    if fuente_opt != "Todas":
-        df_hist_comb = df_hist_comb[df_hist_comb['Fuente'] == fuente_opt]
     if gen_opt != "Todas":
-        df_hist_comb = df_hist_comb[df_hist_comb['Generica'] == gen_opt]
+        df_hist_comb = df_hist_comb[df_hist_comb['Generica'].astype(str).str.startswith(gen_opt)]
     df_hist_comb = df_hist_comb[df_hist_comb['PIM'] > 0]
     if not df_hist_comb.empty:
         ultima_fec_valida = df_hist_comb['Fecha'].max()
@@ -194,7 +210,6 @@ with tab_resumen:
 
         st.table(styler_res)
 
-        # Gráfico tipo Bala (Bullet Chart): PIM ancha de fondo y Devengado delgada adentro (sin sumarse)
         st.caption("Ejecución por Unidad Orgánica — Barra ancha gris: PIM | Barra interior azul: Devengado")
         if unidad_opt == "DRE (Global)":
             g_unidades = df_fecha.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
@@ -294,8 +309,6 @@ with tab_mes:
     else:
         var_m = st.selectbox("Variable mensual", ["Devengado", "Certificacion", "Compromiso", "AtencionMensual", "Girado"], label_visibility="collapsed")
         df_m = filtrar_unidad(df_mens.copy())
-        if fuente_opt != "Todas":
-            df_m = df_m[df_m['Fuente'] == fuente_opt]
         if gen_opt != "Todas":
             df_m = df_m[df_m['Generica'].astype(str).str.startswith(gen_opt)]
 
