@@ -221,31 +221,33 @@ else:
             ).reset_index()
 
             if "Variación" in modo_val and var_sel != "%Ejec":
-                piv_hist["Total Variación"] = piv_hist[fechas_hist].sum(axis=1)
-                cols_h = fechas_hist + ["Total Variación"]
+                piv_hist["Total General"] = piv_hist[fechas_hist].sum(axis=1)
+                cols_h = fechas_hist + ["Total General"]
             else:
                 cols_h = fechas_hist
 
             td_v = generar_td_subtotales(piv_hist, cols_h, incluir_pct=False)
 
-            # Formato limpio: 0 sin signo ni moneda; fecha inicial sin +; intermedios con formato claro
             fecha_inicial = fechas_hist[0]
-            cols_intermedias = [c for c in cols_h if c != fecha_inicial]
+            cols_neutras = [fecha_inicial] + (["Total General"] if "Total General" in cols_h else [])
+            cols_intermedias = [c for c in cols_h if c not in cols_neutras]
 
-            def formato_celda(val, es_inicial=False):
+            def formato_celda(val, es_saldo=False):
                 if abs(val) < 1e-6:
-                    return "0"
+                    return ""
                 if var_sel == "%Ejec":
-                    return f"{val:.2f}%" if (es_inicial or "Saldo" in modo_val) else f"{val:+.2f}%"
-                return f"S/ {val:,.2f}" if (es_inicial or "Saldo" in modo_val) else f"S/ {val:+,.2f}"
+                    return f"{val:.2f}%" if (es_saldo or "Saldo" in modo_val) else f"{val:+.2f}%"
+                return f"S/ {val:,.2f}" if (es_saldo or "Saldo" in modo_val) else f"S/ {val:+,.2f}"
 
-            dict_fmt = {fecha_inicial: lambda x: formato_celda(x, es_inicial=True)}
+            dict_fmt = {}
+            for c in cols_neutras:
+                dict_fmt[c] = lambda x: formato_celda(x, es_saldo=True)
             for c in cols_intermedias:
-                dict_fmt[c] = lambda x: formato_celda(x, es_inicial=False)
+                dict_fmt[c] = lambda x: formato_celda(x, es_saldo=False)
 
             def colorear_variaciones(val):
                 if abs(val) < 1e-6:
-                    return "color: #888888;"
+                    return ""
                 elif val > 0:
                     return "color: #0052CC; font-weight: bold;"
                 else:
@@ -256,6 +258,7 @@ else:
                 styler = styler.map(colorear_variaciones, subset=cols_intermedias)
 
             st.dataframe(styler, use_container_width=True, height=550)
+
 
     with t1:
         st.dataframe(df_view, use_container_width=True)
