@@ -21,7 +21,7 @@ def conectar_gsheets():
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    creds_dict = json.loads(st.secrets["gcp_service_account"])
+    creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open(NOMBRE_SHEET).worksheet("datos")
