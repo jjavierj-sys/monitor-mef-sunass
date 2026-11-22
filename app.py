@@ -195,6 +195,9 @@ with tab_resumen:
             chart_df = pd.concat([g_dre, g_unidades], ignore_index=True)
             orden_u = ["DRE (Global)", "SRT", "SDEM"]
         else:
+            chart_df = df_view.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
+            orden_u = [unidad_opt]
+
         chart_df["Porcentaje"] = chart_df.apply(lambda r: f"{(r['Devengado']/r['PIM']*100):.2f}%" if r["PIM"] > 0 else "0.00%", axis=1)
 
         barra_pim = alt.Chart(chart_df).mark_bar(
