@@ -47,7 +47,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-st.header("🇵🇪 Monitor Presupuestal DRE - SUNASS")
+st.subheader("🇵🇪 Monitor Presupuestal DRE - SUNASS")
 
 
 NOMBRE_SHEET = "Historial_MEF_SUNASS"
