@@ -47,7 +47,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-st.title("🇵🇪 Monitor Presupuestal DRE - SUNASS")
+st.markdown(
+    "<h3 style='margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 1.35rem;'>🇵🇪 Monitor Presupuestal DRE - SUNASS</h3>",
+    unsafe_allow_html=True
+)
+
 
 NOMBRE_SHEET = "Historial_MEF_SUNASS"
 
