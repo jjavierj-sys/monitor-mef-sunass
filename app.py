@@ -21,6 +21,13 @@ st.markdown("""
         padding: 12px 14px;
         border-radius: 10px;
     }
+    /* Permite que los textos largos en tablas se lean completos en varias líneas */
+    table td, table th {
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        font-size: 0.85rem !important;
+        vertical-align: middle !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,7 +42,7 @@ def conectar_gsheets():
     s1 = p + "www." + g + "/auth/spreadsheets"
     s2 = p + "www." + g + "/auth/drive"
     info = json.loads(st.secrets["json_crudo"], strict=False)
-    info["auth_uri"] = p + "accounts." + "://google.com"
+    info["auth_uri"] = p + "accounts." + "google.com"
     info["token_uri"] = p + "oauth2." + g + "/token"
     creds = Credentials.from_service_account_info(info, scopes=[s1, s2])
     return gspread.authorize(creds).open(NOMBRE_SHEET)
@@ -46,8 +53,6 @@ def mapear_unidad(meta):
         return "SRT (PP082)"
     elif m == "61":
         return "SDEM (APNOP)"
-    elif m == "160":
-        return "No DRE (Meta 160)"
     return f"Meta {m}"
 
 @st.cache_data(ttl=60)
@@ -68,6 +73,8 @@ def leer_pestana(nombre):
         df['Meta'] = partes.get(0, '').astype(str).str.strip()
         df['Fuente'] = partes.get(1, '').astype(str).str.strip()
         df['Generica'] = partes.get(2, '').astype(str).str.strip()
+        # Conservar EXCLUSIVAMENTE las metas de la DRE (1 = SRT, 61 = SDEM)
+        df = df[df['Meta'].isin(['1', '61'])].copy()
         df['Unidad'] = df['Meta'].apply(mapear_unidad)
 
     num_cols = [
@@ -99,25 +106,22 @@ fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, label_visibility="collapsed")
 
-# Filtros rápidos enfocados en la DRE (SRT y SDEM)
+# Filtros rápidos exclusivos de la DRE (SRT y SDEM)
 f1, f2, f3 = st.columns(3)
 unidad_opt = f1.selectbox(
-    "Unidad DRE",
-    ["Total DRE (SRT + SDEM)", "SRT (Meta 1 - PP082)", "SDEM (Meta 61 - APNOP)", "Meta 160 (No DRE)"],
+    "Subdirección DRE",
+    ["Total DRE (SRT + SDEM)", "SRT (Meta 1 - PP082)", "SDEM (Meta 61 - APNOP)"],
     index=0
 )
 fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], index=0)
 gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3"], index=0)
 
 def filtrar_unidad(df):
-    if unidad_opt == "Total DRE (SRT + SDEM)":
-        return df[df['Meta'].isin(['1', '61'])]
-    elif unidad_opt == "SRT (Meta 1 - PP082)":
+    if unidad_opt == "SRT (Meta 1 - PP082)":
         return df[df['Meta'] == '1']
     elif unidad_opt == "SDEM (Meta 61 - APNOP)":
         return df[df['Meta'] == '61']
-    else:
-        return df[df['Meta'] == '160']
+    return df
 
 df_view = filtrar_unidad(df_cons[df_cons['Fecha'] == fecha_sel].copy())
 if fuente_opt != "Todas":
@@ -133,7 +137,7 @@ pct_tot = (dev_tot / pim_tot * 100) if pim_tot > 0 else 0.0
 saldo_tot = pim_tot - dev_tot
 
 k1, k2 = st.columns(2)
-k1.metric("PIM Total", f"{pim_tot:,.2f}")
+k1.metric("PIM Total DRE", f"{pim_tot:,.2f}")
 k2.metric("Devengado", f"{dev_tot:,.2f}", f"{dif_dev:+,.2f} hoy" if abs(dif_dev) > 0 else "Sin cambio hoy")
 
 k3, k4 = st.columns(2)
@@ -185,7 +189,8 @@ with tab_resumen:
             "Dif_Devengado": fmt_var_blanco
         }).map(color_var, subset=["Dif_Devengado"])
 
-        st.dataframe(styler_res, use_container_width=True, hide_index=True)
+        # st.table envuelve el texto en varias líneas sin truncar nunca
+        st.table(styler_res)
 
         st.caption("Ejecución por Subdirección y Fuente (PIM vs. Devengado)")
         chart_df = res.set_index("Grupo")[["PIM", "Devengado"]]
@@ -231,7 +236,8 @@ with tab_movs:
             "Variación": "{:+,.2f}"
         }).map(color_mov, subset=["Variación"])
 
-        st.dataframe(styler_mov, use_container_width=True, hide_index=True)
+        # st.table muestra el nombre completo de la específica en varias líneas
+        st.table(styler_mov)
 
 with tab_mes:
     if df_mens.empty:
@@ -250,18 +256,15 @@ with tab_mes:
         res_m = res_m.sort_values("Orden").drop(columns=["Orden"])
 
         st.bar_chart(res_m.set_index("Mes")[var_m], height=240)
-        st.dataframe(
-            res_m.style.format({var_m: lambda x: "" if abs(x) < 1e-6 else f"{x:,.2f}"}),
-            use_container_width=True,
-            hide_index=True
+        st.table(
+            res_m.style.format({var_m: lambda x: "" if abs(x) < 1e-6 else f"{x:,.2f}"})
         )
 
-# Descarga Excel (solo DRE por defecto o base completa)
+# Descarga Excel solo con la información de la DRE
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-    df_cons[df_cons['Meta'].isin(['1', '61'])].to_excel(writer, index=False, sheet_name='Consolidado_DRE')
-    df_mens[df_mens['Meta'].isin(['1', '61'])].to_excel(writer, index=False, sheet_name='Mensual_DRE')
-    df_cons.to_excel(writer, index=False, sheet_name='Base_Completa_MEF')
+    df_cons.to_excel(writer, index=False, sheet_name='Consolidado_DRE')
+    df_mens.to_excel(writer, index=False, sheet_name='Mensual_DRE')
 
 st.download_button(
     label="📥 Descargar Excel DRE (.xlsx)",
