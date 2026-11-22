@@ -195,10 +195,7 @@ with tab_resumen:
             chart_df = pd.concat([g_dre, g_unidades], ignore_index=True)
             orden_u = ["DRE (Global)", "SRT", "SDEM"]
         else:
-            chart_df = df_view.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
-            orden_u = [unidad_opt]
-
-        chart_df["%Ejec."] = chart_df.apply(lambda r: f"{(r['Devengado']/r['PIM']*100):.2f}%" if r["PIM"] > 0 else "0.00%", axis=1)
+        chart_df["Porcentaje"] = chart_df.apply(lambda r: f"{(r['Devengado']/r['PIM']*100):.2f}%" if r["PIM"] > 0 else "0.00%", axis=1)
 
         barra_pim = alt.Chart(chart_df).mark_bar(
             color="#D0D7DE",
@@ -208,7 +205,7 @@ with tab_resumen:
         ).encode(
             x=alt.X("Unidad:N", sort=orden_u, title=None, axis=alt.Axis(labelAngle=0, labelFontWeight="bold")),
             y=alt.Y("PIM:Q", title="Monto (S/)"),
-            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "%Ejec."]
+            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "Porcentaje"]
         )
 
         barra_dev = alt.Chart(chart_df).mark_bar(
@@ -219,7 +216,7 @@ with tab_resumen:
         ).encode(
             x=alt.X("Unidad:N", sort=orden_u),
             y=alt.Y("Devengado:Q"),
-            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "%Ejec."]
+            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "Porcentaje"]
         )
 
         etiquetas = alt.Chart(chart_df).mark_text(
@@ -230,7 +227,7 @@ with tab_resumen:
         ).encode(
             x=alt.X("Unidad:N", sort=orden_u),
             y=alt.Y("Devengado:Q"),
-            text="%Ejec."
+            text=alt.Text("Porcentaje:N")
         )
 
         st.altair_chart((barra_pim + barra_dev + etiquetas).properties(height=280), use_container_width=True)
@@ -298,10 +295,15 @@ with tab_mes:
             cornerRadiusTopLeft=4,
             cornerRadiusTopRight=4
         ).encode(
-            x=alt.X("Mes:N", sort=orden_meses, title=None, axis=alt.Axis(labelAngle=-35)),
+            x=alt.X(
+                "Mes:N",
+                sort=orden_meses,
+                title=None,
+                axis=alt.Axis(labelAngle=-45, labelOverlap=False, labelFontSize=10)
+            ),
             y=alt.Y(f"{var_m}:Q", title="Monto (S/)"),
             tooltip=["Mes", alt.Tooltip(f"{var_m}:Q", format=",.2f")]
-        ).properties(height=250)
+        ).properties(height=260)
 
         st.altair_chart(chart_mes, use_container_width=True)
         st.table(
