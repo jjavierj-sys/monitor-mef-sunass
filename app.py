@@ -48,7 +48,7 @@ st.markdown("""
 
 
 st.markdown(
-    "<h3 style='margin-top: -0.5rem; margin-bottom: 0.75rem; font-size: 1.35rem;'>🇵🇪 Monitor Presupuestal DRE - SUNASS</h3>",
+    "<div style='font-size: 1.25rem; font-weight: 700; line-height: 1.25; margin-top: 0.25rem; margin-bottom: 0.75rem; white-space: normal;'>🇵🇪 Monitor Presupuestal DRE - SUNASS</div>",
     unsafe_allow_html=True
 )
 
