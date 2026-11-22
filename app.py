@@ -1,5 +1,6 @@
 import io
 import json
+import altair as alt
 from google.oauth2.service_account import Credentials
 import gspread
 import pandas as pd
@@ -155,7 +156,6 @@ with tab_resumen:
     if df_view.empty:
         st.warning("Sin datos para los filtros seleccionados.")
     else:
-        # Tabla limpia agrupada unívocamente por Unidad Orgánica y Genérica (sin Dif_Devengado)
         res = df_view.groupby(["Unidad", "Generica"], as_index=False)[
             ["PIM", "Certificacion", "Devengado"]
         ].sum()
@@ -183,8 +183,8 @@ with tab_resumen:
 
         st.table(styler_res)
 
-        # Gráfico limpio PIM vs Devengado por Unidad Orgánica (3 barras si es DRE, 1 si es SRT/SDEM)
-        st.caption("Ejecución por Unidad Orgánica (PIM vs. Devengado)")
+        # Gráfico tipo Bala (Bullet Chart): PIM ancha de fondo y Devengado delgada adentro (sin sumarse)
+        st.caption("Ejecución por Unidad Orgánica — Barra ancha gris: PIM | Barra interior azul: Devengado")
         if unidad_opt == "DRE (Global)":
             g_unidades = df_fecha.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
             g_dre = pd.DataFrame([{
@@ -192,11 +192,48 @@ with tab_resumen:
                 "PIM": df_fecha["PIM"].sum(),
                 "Devengado": df_fecha["Devengado"].sum()
             }])
-            chart_df = pd.concat([g_dre, g_unidades], ignore_index=True).set_index("Unidad")
+            chart_df = pd.concat([g_dre, g_unidades], ignore_index=True)
+            orden_u = ["DRE (Global)", "SRT", "SDEM"]
         else:
-            chart_df = df_view.groupby("Unidad")[["PIM", "Devengado"]].sum()
+            chart_df = df_view.groupby("Unidad", as_index=False)[["PIM", "Devengado"]].sum()
+            orden_u = [unidad_opt]
 
-        st.bar_chart(chart_df, height=260)
+        chart_df["%Ejec."] = chart_df.apply(lambda r: f"{(r['Devengado']/r['PIM']*100):.2f}%" if r["PIM"] > 0 else "0.00%", axis=1)
+
+        barra_pim = alt.Chart(chart_df).mark_bar(
+            color="#D0D7DE",
+            size=52,
+            cornerRadiusTopLeft=4,
+            cornerRadiusTopRight=4
+        ).encode(
+            x=alt.X("Unidad:N", sort=orden_u, title=None, axis=alt.Axis(labelAngle=0, labelFontWeight="bold")),
+            y=alt.Y("PIM:Q", title="Monto (S/)"),
+            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "%Ejec."]
+        )
+
+        barra_dev = alt.Chart(chart_df).mark_bar(
+            color="#0052CC",
+            size=24,
+            cornerRadiusTopLeft=4,
+            cornerRadiusTopRight=4
+        ).encode(
+            x=alt.X("Unidad:N", sort=orden_u),
+            y=alt.Y("Devengado:Q"),
+            tooltip=["Unidad", alt.Tooltip("PIM:Q", format=",.2f"), alt.Tooltip("Devengado:Q", format=",.2f"), "%Ejec."]
+        )
+
+        etiquetas = alt.Chart(chart_df).mark_text(
+            dy=-10,
+            color="#0052CC",
+            fontWeight="bold",
+            fontSize=12
+        ).encode(
+            x=alt.X("Unidad:N", sort=orden_u),
+            y=alt.Y("Devengado:Q"),
+            text="%Ejec."
+        )
+
+        st.altair_chart((barra_pim + barra_dev + etiquetas).properties(height=280), use_container_width=True)
 
 with tab_movs:
     st.caption(f"Cambios detectados el {fecha_sel}")
@@ -254,11 +291,21 @@ with tab_mes:
         orden_meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"]
         res_m = df_m.groupby("Mes", as_index=False)[var_m].sum()
         res_m["Orden"] = res_m["Mes"].apply(lambda m: orden_meses.index(m) if m in orden_meses else 99)
-        res_m = res_m.sort_values("Orden").drop(columns=["Orden"])
+        res_m = res_m.sort_values("Orden").drop(columns=["Orden"]).reset_index(drop=True)
 
-        st.bar_chart(res_m.set_index("Mes")[var_m], height=240)
+        chart_mes = alt.Chart(res_m).mark_bar(
+            color="#0052CC",
+            cornerRadiusTopLeft=4,
+            cornerRadiusTopRight=4
+        ).encode(
+            x=alt.X("Mes:N", sort=orden_meses, title=None, axis=alt.Axis(labelAngle=-35)),
+            y=alt.Y(f"{var_m}:Q", title="Monto (S/)"),
+            tooltip=["Mes", alt.Tooltip(f"{var_m}:Q", format=",.2f")]
+        ).properties(height=250)
+
+        st.altair_chart(chart_mes, use_container_width=True)
         st.table(
-            res_m.style.format({var_m: lambda x: "" if abs(x) < 1e-6 else f"{x:,.2f}"})
+            res_m.set_index("Mes").style.format({var_m: lambda x: "" if abs(x) < 1e-6 else f"{x:,.2f}"})
         )
 
 # Descarga Excel solo con la información de la DRE
