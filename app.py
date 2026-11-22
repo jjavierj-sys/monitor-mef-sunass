@@ -200,7 +200,6 @@ else:
         col_act, col_dif, col_flag = mapa_vars[var_sel]
         col_metrica = col_dif if "Variación" in modo_val else col_act
 
-        # Filtrar por Meta, Fuente, Genérica y la bandera de movimiento en TODA LA HISTORIA (sin restringir a 1 fecha)
         df_v = df_cons[
             (df_cons['Meta'].isin(metas)) &
             (df_cons['Fuente'].isin(fuentes)) &
@@ -228,8 +227,35 @@ else:
                 cols_h = fechas_hist
 
             td_v = generar_td_subtotales(piv_hist, cols_h, incluir_pct=False)
-            fmt_v = {c: ("{:+.2f}%" if "Variación" in modo_val else "{:.2f}%") for c in cols_h} if var_sel == "%Ejec" else {c: ("S/ {:+,.2f}" if "Variación" in modo_val else "S/ {:,.2f}") for c in cols_h}
-            st.dataframe(td_v.style.format(fmt_v), use_container_width=True, height=550)
+
+            # Formato limpio: 0 sin signo ni moneda; fecha inicial sin +; intermedios con formato claro
+            fecha_inicial = fechas_hist[0]
+            cols_intermedias = [c for c in cols_h if c != fecha_inicial]
+
+            def formato_celda(val, es_inicial=False):
+                if abs(val) < 1e-6:
+                    return "0"
+                if var_sel == "%Ejec":
+                    return f"{val:.2f}%" if (es_inicial or "Saldo" in modo_val) else f"{val:+.2f}%"
+                return f"S/ {val:,.2f}" if (es_inicial or "Saldo" in modo_val) else f"S/ {val:+,.2f}"
+
+            dict_fmt = {fecha_inicial: lambda x: formato_celda(x, es_inicial=True)}
+            for c in cols_intermedias:
+                dict_fmt[c] = lambda x: formato_celda(x, es_inicial=False)
+
+            def colorear_variaciones(val):
+                if abs(val) < 1e-6:
+                    return "color: #888888;"
+                elif val > 0:
+                    return "color: #0052CC; font-weight: bold;"
+                else:
+                    return "color: #D93025; font-weight: bold;"
+
+            styler = td_v.style.format(dict_fmt)
+            if "Variación" in modo_val and cols_intermedias:
+                styler = styler.map(colorear_variaciones, subset=cols_intermedias)
+
+            st.dataframe(styler, use_container_width=True, height=550)
 
     with t1:
         st.dataframe(df_view, use_container_width=True)
