@@ -210,20 +210,21 @@ else:
             st.dataframe(td_v.style.format(fmt_v), use_container_width=True, height=520)
 
     with t1:
+        st.dataframe(df_view, use_container_width=True)
+    with t2:
+        st.dataframe(df_mens, use_container_width=True)
 
-st.dataframe(df_view, use_container_width=True)
-with t2:
-st.dataframe(df_mens, use_container_width=True)
-# Descarga Excel con TDs + datos crudos
-buffer = io.BytesIO()
-with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-if not df_view.empty:
-td_d.to_excel(writer, index=False, sheet_name='TD_Diario')
-df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
-df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
-st.sidebar.download_button(
-label="📥 Descargar Excel Completo (.xlsx)",
-data=buffer.getvalue(),
-file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+    # Descarga Excel con TDs + datos crudos
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        if not df_view.empty:
+            td_d.to_excel(writer, index=False, sheet_name='TD_Diario')
+        df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
+        df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
+
+    st.sidebar.download_button(
+        label="📥 Descargar Excel Completo (.xlsx)",
+        data=buffer.getvalue(),
+        file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
