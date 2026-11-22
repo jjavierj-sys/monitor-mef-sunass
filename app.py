@@ -131,10 +131,19 @@ if gen_opt != "Todas":
 
 df_view = filtrar_unidad(df_fecha)
 
-# 4 KPIs Principales
+# 4 KPIs Principales (con respaldo automático del acumulado mensual si el corte diario está en 0)
 pim_tot = df_view['PIM'].sum()
 dev_tot = df_view['Devengado'].sum()
 dif_dev = df_view['Dif_Devengado'].sum()
+
+if dev_tot == 0 and not df_mens.empty:
+    df_m_kpi = filtrar_unidad(df_mens.copy())
+    if fuente_opt != "Todas":
+        df_m_kpi = df_m_kpi[df_m_kpi['Fuente'] == fuente_opt]
+    if gen_opt != "Todas":
+        df_m_kpi = df_m_kpi[df_m_kpi['Generica'] == gen_opt]
+    dev_tot = df_m_kpi['Devengado'].sum()
+
 pct_tot = (dev_tot / pim_tot * 100) if pim_tot > 0 else 0.0
 saldo_tot = pim_tot - dev_tot
 
