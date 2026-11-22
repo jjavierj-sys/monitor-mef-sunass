@@ -18,13 +18,12 @@ NOMBRE_SHEET = "Historial_MEF_SUNASS"
 @st.cache_resource
 def conectar_gsheets():
     scopes = [
-        "https://googleapis.com",
-        "https://googleapis.com"
+        "https://googleapis.com" + "/auth/spreadsheets",
+        "https://googleapis.com" + "/auth/drive"
     ]
     info = json.loads(st.secrets["json_crudo"], strict=False)
-    # Forzamos las URLs oficiales de Google para evitar cualquier error de copiado
-    info["auth_uri"] = "https://google.com"
-    info["token_uri"] = "https://googleapis.com"
+    info["auth_uri"] = "https://google.com" + "/o/oauth2/auth"
+    info["token_uri"] = "https://googleapis.com" + "/token"
     
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     client = gspread.authorize(creds)
