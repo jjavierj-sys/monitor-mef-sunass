@@ -179,51 +179,83 @@ else:
     with t_td_vars:
         mapa_vars = {
             "PIM": ("PIM", "Dif_PIM", ".PIM"),
-            "CERT (Certificación)": ("Certificacion", "Dif_Certificacion", ".Certificacion"),
-            "COMP (Compromiso)": ("Compromiso", "Dif_Compromiso", ".Compromiso"),
-            "CM (Atención Mensual)": ("AtencionMensual", "Dif_AtencionMensual", ".AtencionMensual"),
-            "DEV (Devengado)": ("Devengado", "Dif_Devengado", ".Devengado"),
-            "GIR (Girado)": ("Girado", "Dif_Girado", ".Girado"),
+            "CERT": ("Certificacion", "Dif_Certificacion", ".Certificacion"),
+            "COMP": ("Compromiso", "Dif_Compromiso", ".Compromiso"),
+            "CM": ("AtencionMensual", "Dif_AtencionMensual", ".AtencionMensual"),
+            "DEV": ("Devengado", "Dif_Devengado", ".Devengado"),
+            "GIR": ("Girado", "Dif_Girado", ".Girado"),
             "PIM-CERT": ("PIM-CERT", "Dif_PIM-CERT", ".PIM-CERT"),
             "CERT-COMP": ("CERT-COMP", "Dif_CERT-COMP", ".CERT-COMP"),
             "COMP-CM": ("COMP-CM", "Dif_COMP-CM", ".COMP-CM"),
             "CM-DEV": ("CM-DEV", "Dif_CM-DEV", ".CM-DEV"),
             "DEV-GIR": ("DEV-GIR", "Dif_DEV-GIR", ".DEV-GIR"),
             "PIM-DEV": ("PIM-DEV", "Dif_PIM-DEV", ".PIM-DEV"),
-            "%Ejec.": ("%Ejec.", "Dif_%Ejec.", ".%Ejec.")
+            "%Ejec": ("%Ejec.", "Dif_%Ejec.", ".%Ejec.")
         }
-        var_sel = st.selectbox("Selecciona la pestaña de variación diaria:", list(mapa_vars.keys()), index=4)
-        col_act, col_dif, col_flag = mapa_vars[var_sel]
 
+        c_var1, c_var2 = st.columns([2, 2])
+        var_sel = c_var1.selectbox("Selecciona la hoja / variable histórica:", list(mapa_vars.keys()), index=4)
+        modo_val = c_var2.radio("Mostrar en columnas por fecha:", ["Variación del día (Dif_)", "Saldo acumulado"], horizontal=True)
+
+        col_act, col_dif, col_flag = mapa_vars[var_sel]
+        col_metrica = col_dif if "Variación" in modo_val else col_act
+
+        # Filtrar por Meta, Fuente, Genérica y la bandera de movimiento en TODA LA HISTORIA (sin restringir a 1 fecha)
         df_v = df_cons[
-            (df_cons['Fecha'] == fecha_sel) &
             (df_cons['Meta'].isin(metas)) &
             (df_cons['Fuente'].isin(fuentes)) &
             (df_cons['Generica'].isin(genericas)) &
             (df_cons[col_flag] == col_flag)
-        ]
+        ].copy()
+        df_v[col_metrica] = pd.to_numeric(df_v[col_metrica], errors='coerce').fillna(0.0)
+
         if df_v.empty:
-            st.info(f"No se registraron movimientos en {var_sel} para la fecha {fecha_sel} con los filtros actuales.")
+            st.info(f"No hay registros históricos con movimiento en {var_sel} para los filtros actuales.")
         else:
-            td_v = generar_td_subtotales(df_v, [col_act, col_dif], incluir_pct=False)
-            fmt_v = {col_act: "{:.2f}%", col_dif: "{:+.2f}%"} if "%Ejec." in var_sel else {col_act: "S/ {:,.2f}", col_dif: "S/ {:+,.2f}"}
-            st.dataframe(td_v.style.format(fmt_v), use_container_width=True, height=520)
+            fechas_hist = sorted(df_v["Fecha"].unique())
+            piv_hist = df_v.pivot_table(
+                index=["Programa", "Fuente", "Generica", "EspecificaCompleta"],
+                columns="Fecha",
+                values=col_metrica,
+                aggfunc="sum",
+                fill_value=0.0
+            ).reset_index()
+
+            if "Variación" in modo_val and var_sel != "%Ejec":
+                piv_hist["Total Variación"] = piv_hist[fechas_hist].sum(axis=1)
+                cols_h = fechas_hist + ["Total Variación"]
+            else:
+                cols_h = fechas_hist
+
+            td_v = generar_td_subtotales(piv_hist, cols_h, incluir_pct=False)
+            fmt_v = {c: ("{:+.2f}%" if "Variación" in modo_val else "{:.2f}%") for c in cols_h} if var_sel == "%Ejec" else {c: ("S/ {:+,.2f}" if "Variación" in modo_val else "S/ {:,.2f}") for c in cols_h}
+            st.dataframe(td_v.style.format(fmt_v), use_container_width=True, height=550)
 
     with t1:
         st.dataframe(df_view, use_container_width=True)
     with t2:
         st.dataframe(df_mens, use_container_width=True)
 
-    # Descarga Excel con TDs + datos crudos
+    # Descarga Excel con las 15 hojas de Tablas Dinámicas + datos crudos
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         if not df_view.empty:
             td_d.to_excel(writer, index=False, sheet_name='TD_Diario')
+        if not df_mens.empty and 'td_m' in locals():
+            td_m.to_excel(writer, index=False, sheet_name='TD_Mensual')
+        for nombre_hoja, (c_act, c_dif, c_flg) in mapa_vars.items():
+            df_h = df_cons[(df_cons['Meta'].isin(metas)) & (df_cons['Fuente'].isin(fuentes)) & (df_cons['Generica'].isin(genericas)) & (df_cons[c_flg] == c_flg)].copy()
+            if not df_h.empty:
+                df_h[c_dif] = pd.to_numeric(df_h[c_dif], errors='coerce').fillna(0.0)
+                f_h = sorted(df_h["Fecha"].unique())
+                p_h = df_h.pivot_table(index=["Programa", "Fuente", "Generica", "EspecificaCompleta"], columns="Fecha", values=c_dif, aggfunc="sum", fill_value=0.0).reset_index()
+                td_h = generar_td_subtotales(p_h, f_h, incluir_pct=False)
+                td_h.to_excel(writer, index=False, sheet_name=nombre_hoja[:31])
         df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
         df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
 
     st.sidebar.download_button(
-        label="📥 Descargar Excel Completo (.xlsx)",
+        label="📥 Descargar Excel con 15 TDs (.xlsx)",
         data=buffer.getvalue(),
         file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
