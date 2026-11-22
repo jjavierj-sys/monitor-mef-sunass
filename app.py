@@ -59,12 +59,12 @@ def guardar_foto_hoy(df_hoy):
 
 # --- CONSULTA ÚNICA AL MEF (SUNASS) ---
 def descargar_datos_mef():
-    base_mef = "https://" + "datosabiertos." + "mef.gob.pe/api/3/action/datastore_search"
+    base_mef = "https://" + "api.datosabiertos." + "mef.gob.pe/DatosAbiertos/v1/datastore_search"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     
-    # Filtramos directamente por Pliego 021 (SUNASS) y traemos sus registros del año
+    # Filtramos directamente por Pliego 021 (SUNASS)
     params = {
         "resource_id": RESOURCE_ID,
         "filters": json.dumps({"PLIEGO": "021"}),
