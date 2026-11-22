@@ -127,7 +127,7 @@ df_fecha = df_cons[df_cons['Fecha'] == fecha_sel].copy()
 if fuente_opt != "Todas":
     df_fecha = df_fecha[df_fecha['Fuente'] == fuente_opt]
 if gen_opt != "Todas":
-    df_fecha = df_fecha[df_fecha['Generica'] == gen_opt]
+    df_fecha = df_fecha[df_fecha['Generica'].astype(str).str.startswith(gen_opt)]
 
 df_view = filtrar_unidad(df_fecha)
 
@@ -297,7 +297,7 @@ with tab_mes:
         if fuente_opt != "Todas":
             df_m = df_m[df_m['Fuente'] == fuente_opt]
         if gen_opt != "Todas":
-            df_m = df_m[df_m['Generica'] == gen_opt]
+            df_m = df_m[df_m['Generica'].astype(str).str.startswith(gen_opt)]
 
         orden_meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"]
         res_m = df_m.groupby("Mes", as_index=False)[var_m].sum()
