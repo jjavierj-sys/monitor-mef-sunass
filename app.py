@@ -21,8 +21,11 @@ def conectar_gsheets():
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    # Lee el JSON tal cual lo descargaste de Google
     info = json.loads(st.secrets["json_crudo"], strict=False)
+    # Forzamos las URLs oficiales de Google para evitar cualquier error de copiado
+    info["auth_uri"] = "https://google.com"
+    info["token_uri"] = "https://googleapis.com"
+    
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open(NOMBRE_SHEET).worksheet("datos")
