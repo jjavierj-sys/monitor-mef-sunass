@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="SUNASS MEF",
+    page_title="Monitor DRE - SUNASS",
     page_icon="🇵🇪",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -24,7 +24,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🇵🇪 Monitor MEF - SUNASS")
+st.title("🇵🇪 Monitor Presupuestal DRE - SUNASS")
 
 NOMBRE_SHEET = "Historial_MEF_SUNASS"
 
@@ -39,6 +39,16 @@ def conectar_gsheets():
     info["token_uri"] = p + "oauth2." + g + "/token"
     creds = Credentials.from_service_account_info(info, scopes=[s1, s2])
     return gspread.authorize(creds).open(NOMBRE_SHEET)
+
+def mapear_unidad(meta):
+    m = str(meta).strip()
+    if m == "1":
+        return "SRT (PP082)"
+    elif m == "61":
+        return "SDEM (APNOP)"
+    elif m == "160":
+        return "No DRE (Meta 160)"
+    return f"Meta {m}"
 
 @st.cache_data(ttl=60)
 def leer_pestana(nombre):
@@ -58,6 +68,7 @@ def leer_pestana(nombre):
         df['Meta'] = partes.get(0, '').astype(str).str.strip()
         df['Fuente'] = partes.get(1, '').astype(str).str.strip()
         df['Generica'] = partes.get(2, '').astype(str).str.strip()
+        df['Unidad'] = df['Meta'].apply(mapear_unidad)
 
     num_cols = [
         "PIA", "PIM", "Certificacion", "Compromiso", "AtencionMensual", "Devengado", "Girado",
@@ -70,7 +81,7 @@ def leer_pestana(nombre):
 
     return df
 
-# Barra superior compacta (funciona perfecto en celular)
+# Barra superior compacta
 col_ref, col_fec = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Actualizar", use_container_width=True, type="primary"):
@@ -88,24 +99,33 @@ fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, label_visibility="collapsed")
 
-# Filtros rápidos horizontales
+# Filtros rápidos enfocados en la DRE (SRT y SDEM)
 f1, f2, f3 = st.columns(3)
-area_opt = f1.selectbox("Área", ["DRE (1 y 61)", "Todas", "Meta 160"], index=0)
+unidad_opt = f1.selectbox(
+    "Unidad DRE",
+    ["Total DRE (SRT + SDEM)", "SRT (Meta 1 - PP082)", "SDEM (Meta 61 - APNOP)", "Meta 160 (No DRE)"],
+    index=0
+)
 fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], index=0)
 gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3"], index=0)
 
-df_view = df_cons[df_cons['Fecha'] == fecha_sel].copy()
-if area_opt == "DRE (1 y 61)":
-    df_view = df_view[df_view['Meta'].isin(['1', '61'])]
-elif area_opt == "Meta 160":
-    df_view = df_view[df_view['Meta'] == '160']
+def filtrar_unidad(df):
+    if unidad_opt == "Total DRE (SRT + SDEM)":
+        return df[df['Meta'].isin(['1', '61'])]
+    elif unidad_opt == "SRT (Meta 1 - PP082)":
+        return df[df['Meta'] == '1']
+    elif unidad_opt == "SDEM (Meta 61 - APNOP)":
+        return df[df['Meta'] == '61']
+    else:
+        return df[df['Meta'] == '160']
 
+df_view = filtrar_unidad(df_cons[df_cons['Fecha'] == fecha_sel].copy())
 if fuente_opt != "Todas":
     df_view = df_view[df_view['Fuente'] == fuente_opt]
 if gen_opt != "Todas":
     df_view = df_view[df_view['Generica'] == gen_opt]
 
-# 4 KPIs Principales (2x2 automático en celular)
+# 4 KPIs Principales (2x2 adaptado a celular)
 pim_tot = df_view['PIM'].sum()
 dev_tot = df_view['Devengado'].sum()
 dif_dev = df_view['Dif_Devengado'].sum()
@@ -120,9 +140,8 @@ k3, k4 = st.columns(2)
 k3.metric("% Ejecución", f"{pct_tot:.2f}%")
 k4.metric("Saldo (PIM - Dev)", f"{saldo_tot:,.2f}")
 
-# 3 Pestañas Ejecutivas
 tab_resumen, tab_movs, tab_mes = st.tabs([
-    "📌 Resumen",
+    "📌 Resumen DRE",
     "⚡ Movimientos Hoy",
     "📅 Mensual"
 ])
@@ -131,15 +150,14 @@ with tab_resumen:
     if df_view.empty:
         st.warning("Sin datos para los filtros seleccionados.")
     else:
-        res = df_view.groupby(["Programa", "Fuente", "Generica"], as_index=False)[
+        res = df_view.groupby(["Unidad", "Fuente", "Generica"], as_index=False)[
             ["PIM", "Certificacion", "Devengado", "Dif_Devengado"]
         ].sum()
         res["%Ejec."] = res.apply(lambda r: (r["Devengado"] / r["PIM"] * 100) if r["PIM"] > 0 else 0.0, axis=1)
-        res["Grupo"] = res["Programa"] + " | " + res["Fuente"] + " | " + res["Generica"]
+        res["Grupo"] = res["Unidad"] + " | " + res["Fuente"] + " | " + res["Generica"]
 
-        # Fila Total General
         tot_row = pd.DataFrame([{
-            "Grupo": "TOTAL GENERAL",
+            "Grupo": "TOTAL SELECCIÓN",
             "PIM": res["PIM"].sum(),
             "Certificacion": res["Certificacion"].sum(),
             "Devengado": res["Devengado"].sum(),
@@ -169,7 +187,7 @@ with tab_resumen:
 
         st.dataframe(styler_res, use_container_width=True, hide_index=True)
 
-        st.caption("Comparativo PIM vs. Devengado por Grupo")
+        st.caption("Ejecución por Subdirección y Fuente (PIM vs. Devengado)")
         chart_df = res.set_index("Grupo")[["PIM", "Devengado"]]
         st.bar_chart(chart_df, height=260)
 
@@ -189,7 +207,7 @@ with tab_movs:
             val_dif = row[col_dif]
             if abs(val_dif) >= 0.01:
                 movs.append({
-                    "Grupo": f"{row['Programa']} | {row['Fuente']} | {row['Generica']}",
+                    "Subdirección": f"{row['Unidad']} | {row['Fuente']} | {row['Generica']}",
                     "Específica": row["EspecificaCompleta"],
                     "Rubro": nombre_etapa,
                     "Acumulado": row[col_act],
@@ -220,11 +238,7 @@ with tab_mes:
         st.info("Sin datos mensuales cargados.")
     else:
         var_m = st.selectbox("Variable mensual", ["Devengado", "Certificacion", "Compromiso", "AtencionMensual", "Girado"], label_visibility="collapsed")
-        df_m = df_mens.copy()
-        if area_opt == "DRE (1 y 61)":
-            df_m = df_m[df_m['Meta'].isin(['1', '61'])]
-        elif area_opt == "Meta 160":
-            df_m = df_m[df_m['Meta'] == '160']
+        df_m = filtrar_unidad(df_mens.copy())
         if fuente_opt != "Todas":
             df_m = df_m[df_m['Fuente'] == fuente_opt]
         if gen_opt != "Todas":
@@ -242,16 +256,17 @@ with tab_mes:
             hide_index=True
         )
 
-# Descarga Excel al pie
+# Descarga Excel (solo DRE por defecto o base completa)
 buffer = io.BytesIO()
 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-    df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
-    df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
+    df_cons[df_cons['Meta'].isin(['1', '61'])].to_excel(writer, index=False, sheet_name='Consolidado_DRE')
+    df_mens[df_mens['Meta'].isin(['1', '61'])].to_excel(writer, index=False, sheet_name='Mensual_DRE')
+    df_cons.to_excel(writer, index=False, sheet_name='Base_Completa_MEF')
 
 st.download_button(
-    label="📥 Descargar Base Completa (.xlsx)",
+    label="📥 Descargar Excel DRE (.xlsx)",
     data=buffer.getvalue(),
-    file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
+    file_name=f"SUNASS_DRE_{fecha_sel}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True
 )
