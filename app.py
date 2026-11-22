@@ -44,15 +44,28 @@ else:
     st.sidebar.header("Filtros Rápidos")
     fechas = sorted(df_cons['Fecha'].astype(str).unique(), reverse=True)
     fecha_sel = st.sidebar.selectbox("Fecha de corte:", fechas)
-    metas = st.sidebar.multiselect("Meta:", ['1', '61', '160'], default=['1', '61', '160'], format_func=str)
+    
+    # Filtro rápido de Área DRE (Metas 1 y 61) igual que tu segmentador de Excel
+    solo_dre = st.sidebar.checkbox("Solo Área DRE (Metas 1 y 61)")
+    metas_default = ['1', '61'] if solo_dre else ['1', '61', '160']
+    metas = st.sidebar.multiselect("Meta:", ['1', '61', '160'], default=metas_default, format_func=str)
+    
+    # Filtro de Genérica (2.1 y 2.3)
+    genericas = st.sidebar.multiselect("Genérica:", ['2.1', '2.3'], default=['2.1', '2.3'], format_func=str)
+    
     solo_cambios_dev = st.sidebar.checkbox("Solo con variación en Devengado (.Devengado)")
     solo_pim_mayor_0 = st.sidebar.checkbox("Solo PIM > 0", value=True)
 
-    df_view = df_cons[(df_cons['Fecha'].astype(str) == fecha_sel) & (df_cons['Meta'].astype(str).isin(metas))]
+    df_view = df_cons[
+        (df_cons['Fecha'].astype(str) == fecha_sel) & 
+        (df_cons['Meta'].astype(str).isin(metas)) &
+        (df_cons['Generica'].astype(str).isin(genericas))
+    ]
     if solo_pim_mayor_0:
         df_view = df_view[df_view['PIM.'] == 'PIM>0']
     if solo_cambios_dev:
         df_view = df_view[df_view['.Devengado'] == '.Devengado']
+
 
     # KPIs superiores exactos
     c1, c2, c3, c4 = st.columns(4)
