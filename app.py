@@ -21,23 +21,11 @@ def conectar_gsheets():
         "https://googleapis.com",
         "https://googleapis.com"
     ]
-    sec = st.secrets["gcp_service_account"]
-    info = {
-        "type": "service_account",
-        "project_id": sec["project_id"],
-        "private_key_id": sec["private_key_id"],
-        "private_key": sec["private_key"].replace("\\n", "\n"),
-        "client_email": sec["client_email"],
-        "client_id": sec["client_id"],
-        "auth_uri": "https://google.com",
-        "token_uri": "https://googleapis.com",
-        "auth_provider_x509_cert_url": "https://googleapis.com",
-        "client_x509_cert_url": sec["client_x509_cert_url"]
-    }
+    # Lee el JSON tal cual lo descargaste de Google
+    info = json.loads(st.secrets["json_crudo"], strict=False)
     creds = Credentials.from_service_account_info(info, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open(NOMBRE_SHEET).worksheet("datos")
-
 
 def leer_historial():
     sheet = conectar_gsheets()
