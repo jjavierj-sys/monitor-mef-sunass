@@ -27,7 +27,8 @@ def conectar_gsheets():
 @st.cache_data(ttl=60)
 def leer_pestana(nombre):
     wb = conectar_gsheets()
-    regs = wb.worksheet(nombre).get_all_records()
+    # UNFORMATTED_VALUE trae el número exacto sin puntos ni comas visuales
+    regs = wb.worksheet(nombre).get_all_records(value_render_option='UNFORMATTED_VALUE')
     return pd.DataFrame(regs) if regs else pd.DataFrame()
 
 if st.button("🔄 Refrescar Vista Web", type="primary"):
@@ -53,15 +54,11 @@ else:
     if solo_cambios_dev:
         df_view = df_view[df_view['.Devengado'] == '.Devengado']
 
-    # KPIs superiores
+    # KPIs superiores exactos
     c1, c2, c3, c4 = st.columns(4)
-    # Limpiar formato de miles del MEF (el punto en Consulta Amigable separa miles)
-    def limpiar_num(serie):
-        return pd.to_numeric(serie.astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce').fillna(0)
-
-    pim_tot = limpiar_num(df_view['PIM']).sum()
-    dev_tot = limpiar_num(df_view['Devengado']).sum()
-    dif_dev = limpiar_num(df_view['Dif_Devengado']).sum()
+    pim_tot = pd.to_numeric(df_view['PIM'], errors='coerce').fillna(0).sum()
+    dev_tot = pd.to_numeric(df_view['Devengado'], errors='coerce').fillna(0).sum()
+    dif_dev = pd.to_numeric(df_view['Dif_Devengado'], errors='coerce').fillna(0).sum()
     pct_tot = (dev_tot / pim_tot * 100) if pim_tot > 0 else 0
 
     c1.metric("PIM Total", f"S/ {pim_tot:,.2f}")
