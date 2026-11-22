@@ -15,12 +15,15 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 900px; }
+    .block-container { padding-top: 1.2rem; padding-bottom: 1.5rem; max-width: 900px; }
     div[data-testid="stMetric"] {
         background-color: #f8f9fa;
         border: 1px solid #e9ecef;
-        padding: 12px 14px;
+        padding: 10px 12px;
         border-radius: 10px;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.35rem !important;
     }
     table td, table th {
         white-space: normal !important;
@@ -28,8 +31,21 @@ st.markdown("""
         font-size: 0.85rem !important;
         vertical-align: middle !important;
     }
+    /* Mantiene bloques de 2 columnas en celular para evitar listas largas */
+    @media (max-width: 640px) {
+        div[data-testid="stHorizontalBlock"] {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0.5rem !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+    }
     </style>
 """, unsafe_allow_html=True)
+
 
 st.title("🇵🇪 Monitor Presupuestal DRE - SUNASS")
 
