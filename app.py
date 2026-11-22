@@ -45,6 +45,39 @@ def leer_pestana(nombre):
         
     return df
 
+def generar_td_subtotales(df, cols_suma, incluir_pct=True):
+    if df.empty:
+        return pd.DataFrame()
+    df_work = df.copy()
+    for c in cols_suma:
+        df_work[c] = pd.to_numeric(df_work[c], errors='coerce').fillna(0.0)
+
+    bloques = []
+    for (prog, fuente, gen), grp in df_work.groupby(["Programa", "Fuente", "Generica"], sort=True):
+        sub = grp[["EspecificaCompleta"] + cols_suma].copy()
+        sub.insert(0, "Grupo (Prog | Fuente | Gen)", f"{prog} | {fuente} | {gen}")
+        if incluir_pct and "PIM" in cols_suma and "Devengado" in cols_suma:
+            sub["%Ejec."] = sub.apply(lambda r: (r["Devengado"] / r["PIM"] * 100) if r["PIM"] != 0 else 0.0, axis=1)
+        bloques.append(sub)
+
+        tot_grp = grp[cols_suma].sum().to_dict()
+        tot_grp["Grupo (Prog | Fuente | Gen)"] = f"▶ SUBTOTAL {prog} | {fuente} | {gen}"
+        tot_grp["EspecificaCompleta"] = ""
+        if incluir_pct and "PIM" in cols_suma and "Devengado" in cols_suma:
+            tot_grp["%Ejec."] = (tot_grp["Devengado"] / tot_grp["PIM"] * 100) if tot_grp["PIM"] != 0 else 0.0
+        bloques.append(pd.DataFrame([tot_grp]))
+
+    tot_gen = df_work[cols_suma].sum().to_dict()
+    tot_gen["Grupo (Prog | Fuente | Gen)"] = "🏆 TOTAL GENERAL"
+    tot_gen["EspecificaCompleta"] = ""
+    if incluir_pct and "PIM" in cols_suma and "Devengado" in cols_suma:
+        tot_gen["%Ejec."] = (tot_gen["Devengado"] / tot_gen["PIM"] * 100) if tot_gen["PIM"] != 0 else 0.0
+    bloques.append(pd.DataFrame([tot_gen]))
+
+    res = pd.concat(bloques, ignore_index=True)
+    cols_orden = ["Grupo (Prog | Fuente | Gen)", "EspecificaCompleta"] + cols_suma + (["%Ejec."] if incluir_pct and "PIM" in cols_suma else [])
+    return res[cols_orden]
+
 if st.button("🔄 Refrescar Vista Web", type="primary"):
     st.cache_data.clear()
     st.rerun()
@@ -87,7 +120,6 @@ else:
     if solo_cambios_dev:
         df_view = df_view[df_view['.Devengado'] == '.Devengado']
 
-
     # KPIs superiores exactos
     c1, c2, c3, c4 = st.columns(4)
     pim_tot = pd.to_numeric(df_view['PIM'], errors='coerce').fillna(0).sum()
@@ -100,21 +132,97 @@ else:
     c3.metric("% Ejecución (Dev/PIM)", f"{pct_tot:.2f}%")
     c4.metric("Saldo PIM - Dev", f"S/ {(pim_tot - dev_tot):,.2f}")
 
-    t1, t2 = st.tabs(["📌 Consolidado Acumulado y Variaciones", "📅 Ejecución Último Mes"])
+    # Pestañas con tus 15 Tablas Dinámicas + tus vistas originales
+    t_td_diario, t_td_mensual, t_td_vars, t1, t2 = st.tabs([
+        "📊 TD Diario",
+        "📅 TD Mensual",
+        "📈 TD Variaciones (13 Hojas)",
+        "📌 Datos Consolidados",
+        "📋 Datos Último Mes"
+    ])
+
+    with t_td_diario:
+        cols_diario = ["PIA", "PIM", "Certificacion", "Compromiso", "AtencionMensual", "Devengado", "Girado", "PIM-CERT", "CERT-COMP", "COMP-CM", "CM-DEV", "DEV-GIR", "PIM-DEV"]
+        td_d = generar_td_subtotales(df_view, cols_diario, incluir_pct=True)
+        if not td_d.empty:
+            fmt_d = {c: "S/ {:,.2f}" for c in cols_diario}
+            fmt_d["%Ejec."] = "{:.2f}%"
+            st.dataframe(td_d.style.format(fmt_d), use_container_width=True, height=550)
+
+    with t_td_mensual:
+        if not df_mens.empty:
+            metrica_m = st.selectbox("Variable mensual a visualizar:", ["Devengado", "Certificacion", "Compromiso", "AtencionMensual", "Girado"], index=0)
+            df_m_filt = df_mens[
+                (df_mens['Meta'].isin(metas)) &
+                (df_mens['Fuente'].isin(fuentes)) &
+                (df_mens['Generica'].isin(genericas))
+            ].copy()
+            df_m_filt[metrica_m] = pd.to_numeric(df_m_filt[metrica_m], errors='coerce').fillna(0.0)
+
+            orden_meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"]
+            meses_disp = [m for m in orden_meses if m in df_m_filt["Mes"].unique()]
+
+            if meses_disp:
+                piv = df_m_filt.pivot_table(
+                    index=["Programa", "Fuente", "Generica", "EspecificaCompleta"],
+                    columns="Mes",
+                    values=metrica_m,
+                    aggfunc="sum",
+                    fill_value=0.0
+                ).reset_index()
+                piv["Total General"] = piv[meses_disp].sum(axis=1)
+                td_m = generar_td_subtotales(piv, meses_disp + ["Total General"], incluir_pct=False)
+                fmt_m = {c: "S/ {:,.2f}" for c in meses_disp + ["Total General"]}
+                st.dataframe(td_m.style.format(fmt_m), use_container_width=True, height=550)
+
+    with t_td_vars:
+        mapa_vars = {
+            "PIM": ("PIM", "Dif_PIM", ".PIM"),
+            "CERT (Certificación)": ("Certificacion", "Dif_Certificacion", ".Certificacion"),
+            "COMP (Compromiso)": ("Compromiso", "Dif_Compromiso", ".Compromiso"),
+            "CM (Atención Mensual)": ("AtencionMensual", "Dif_AtencionMensual", ".AtencionMensual"),
+            "DEV (Devengado)": ("Devengado", "Dif_Devengado", ".Devengado"),
+            "GIR (Girado)": ("Girado", "Dif_Girado", ".Girado"),
+            "PIM-CERT": ("PIM-CERT", "Dif_PIM-CERT", ".PIM-CERT"),
+            "CERT-COMP": ("CERT-COMP", "Dif_CERT-COMP", ".CERT-COMP"),
+            "COMP-CM": ("COMP-CM", "Dif_COMP-CM", ".COMP-CM"),
+            "CM-DEV": ("CM-DEV", "Dif_CM-DEV", ".CM-DEV"),
+            "DEV-GIR": ("DEV-GIR", "Dif_DEV-GIR", ".DEV-GIR"),
+            "PIM-DEV": ("PIM-DEV", "Dif_PIM-DEV", ".PIM-DEV"),
+            "%Ejec.": ("%Ejec.", "Dif_%Ejec.", ".%Ejec.")
+        }
+        var_sel = st.selectbox("Selecciona la pestaña de variación diaria:", list(mapa_vars.keys()), index=4)
+        col_act, col_dif, col_flag = mapa_vars[var_sel]
+
+        df_v = df_cons[
+            (df_cons['Fecha'] == fecha_sel) &
+            (df_cons['Meta'].isin(metas)) &
+            (df_cons['Fuente'].isin(fuentes)) &
+            (df_cons['Generica'].isin(genericas)) &
+            (df_cons[col_flag] == col_flag)
+        ]
+        if df_v.empty:
+            st.info(f"No se registraron movimientos en {var_sel} para la fecha {fecha_sel} con los filtros actuales.")
+        else:
+            td_v = generar_td_subtotales(df_v, [col_act, col_dif], incluir_pct=False)
+            fmt_v = {col_act: "{:.2f}%", col_dif: "{:+.2f}%"} if "%Ejec." in var_sel else {col_act: "S/ {:,.2f}", col_dif: "S/ {:+,.2f}"}
+            st.dataframe(td_v.style.format(fmt_v), use_container_width=True, height=520)
+
     with t1:
-        st.dataframe(df_view, use_container_width=True)
-    with t2:
-        st.dataframe(df_mens, use_container_width=True)
 
-    # Descarga Excel
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
-        df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
-
-    st.sidebar.download_button(
-        label="📥 Descargar Excel Completo (.xlsx)",
-        data=buffer.getvalue(),
-        file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+st.dataframe(df_view, use_container_width=True)
+with t2:
+st.dataframe(df_mens, use_container_width=True)
+# Descarga Excel con TDs + datos crudos
+buffer = io.BytesIO()
+with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+if not df_view.empty:
+td_d.to_excel(writer, index=False, sheet_name='TD_Diario')
+df_cons.to_excel(writer, index=False, sheet_name='MEF_Consolidado_Unico')
+df_mens.to_excel(writer, index=False, sheet_name='tblMensual')
+st.sidebar.download_button(
+label="📥 Descargar Excel Completo (.xlsx)",
+data=buffer.getvalue(),
+file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
+mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
