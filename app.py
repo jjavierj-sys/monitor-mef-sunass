@@ -139,30 +139,25 @@ def limpiar_filtros():
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
 
-# Botones táctiles directos (un solo toque en celular, sin menús desplegables)
-unidad_opt = st.radio(
+# Filtros rápidos en cuadrícula compacta 2x2
+f1, f2 = st.columns(2)
+unidad_opt = f1.selectbox(
     "Unidad Orgánica",
     ["DRE (Global)", "SRT", "SDEM"],
-    key="unidad_opt",
-    horizontal=True
+    key="unidad_opt"
 )
-
-f1, f2 = st.columns(2)
-fuente_opt = f1.radio(
+fuente_opt = f2.selectbox(
     "Fuente",
     ["Todas", "RO", "RDR"],
-    key="fuente_opt",
-    horizontal=True
+    key="fuente_opt"
 )
-gen_opt = f2.radio(
+
+f3, f4 = st.columns([2, 1.2])
+gen_opt = f3.selectbox(
     "Genérica",
     ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"],
-    key="gen_opt",
-    horizontal=True
+    key="gen_opt"
 )
-
-st.button("🧹 Limpiar filtros", on_click=limpiar_filtros, use_container_width=True)
-
 with f4:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
     st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
