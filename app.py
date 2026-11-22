@@ -38,10 +38,10 @@ def leer_pestana(nombre):
         )
     # Extraer Meta, Fuente y Generica limpios desde ConsultaRealizada ("61 | RDR | 2.1 | Acumulado")
     if 'ConsultaRealizada' in df.columns:
-        partes = df['ConsultaRealizada'].astype(str).str.split('|')
-        df['Meta'] = partes.str.str.strip()
-        df['Fuente'] = partes.str.str.strip()
-        df['Generica'] = partes.str.str.strip()
+        partes = df['ConsultaRealizada'].astype(str).str.split('|', expand=True)
+        df['Meta'] = partes.get(0, '').astype(str).str.strip()
+        df['Fuente'] = partes.get(1, '').astype(str).str.strip()
+        df['Generica'] = partes.get(2, '').astype(str).str.strip()
         
     return df
 
