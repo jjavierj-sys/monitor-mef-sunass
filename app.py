@@ -16,9 +16,11 @@ def conectar_gsheets():
     g = "googleapis.com"
     s1 = p + "www." + g + "/auth/spreadsheets"
     s2 = p + "www." + g + "/auth/drive"
+    
     info = json.loads(st.secrets["json_crudo"], strict=False)
-    info["auth_uri"] = p + "://google.com"
+    info["auth_uri"] = p + "accounts." + "://google.com"
     info["token_uri"] = p + "oauth2." + g + "/token"
+    
     creds = Credentials.from_service_account_info(info, scopes=[s1, s2])
     return gspread.authorize(creds).open(NOMBRE_SHEET)
 
@@ -28,7 +30,7 @@ def leer_pestana(nombre):
     regs = wb.worksheet(nombre).get_all_records()
     return pd.DataFrame(regs) if regs else pd.DataFrame()
 
-if st.button("🔄 Refrescar Datos desde Google Sheets", type="primary"):
+if st.button("🔄 Refrescar Vista Web", type="primary"):
     st.cache_data.clear()
     st.rerun()
 
@@ -38,10 +40,9 @@ df_mens = leer_pestana("tblMensual")
 if df_cons.empty:
     st.info("Ejecuta 'Actualizar Todo MEF (Hoy)' desde el menú de tu Google Sheet para cargar los datos.")
 else:
-    # Filtros laterales replicating tus columnas auxiliares
     st.sidebar.header("Filtros Rápidos")
     fechas = sorted(df_cons['Fecha'].astype(str).unique(), reverse=True)
-    fecha_sel = st.sidebar.selectbox("Fecha:", fechas)
+    fecha_sel = st.sidebar.selectbox("Fecha de corte:", fechas)
     metas = st.sidebar.multiselect("Meta:", ['1', '61', '160'], default=['1', '61', '160'], format_func=str)
     solo_cambios_dev = st.sidebar.checkbox("Solo con variación en Devengado (.Devengado)")
     solo_pim_mayor_0 = st.sidebar.checkbox("Solo PIM > 0", value=True)
