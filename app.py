@@ -325,7 +325,23 @@ with tab_movs:
         st.info("No se registraron variaciones presupuestales en esta fecha.")
     else:
         df_movs = pd.DataFrame(movs)
-        rubros_disp = ["Todos"] + sorted(df_movs["Rubro"].unique().tolist())
+
+        # Orden presupuestal oficial por fase de gasto + importe de positivo a negativo
+        orden_fases = {
+            "PIM": 1,
+            "Certificación": 2,
+            "Compromiso": 3,
+            "At. Mensual": 4,
+            "Devengado": 5,
+            "Girado": 6
+        }
+        df_movs["_orden_fase"] = df_movs["Rubro"].map(orden_fases).fillna(99)
+        df_movs = df_movs.sort_values(
+            by=["_orden_fase", "Variación"],
+            ascending=[True, False]
+        ).drop(columns=["_orden_fase"]).reset_index(drop=True)
+
+        rubros_disp = ["Todos"] + [r for r in orden_fases.keys() if r in df_movs["Rubro"].unique()]
         rubro_sel = st.selectbox("Filtrar por rubro:", rubros_disp, label_visibility="collapsed")
         if rubro_sel != "Todos":
             df_movs = df_movs[df_movs["Rubro"] == rubro_sel]
