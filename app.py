@@ -8,6 +8,7 @@ import streamlit as st
 st.set_page_config(page_title="Monitor Presupuestal SUNASS - MEF", layout="wide")
 st.title("📊 Monitor Presupuestal SUNASS (Consulta Amigable MEF)")
 
+
 NOMBRE_SHEET = "Historial_MEF_SUNASS"
 
 @st.cache_resource
