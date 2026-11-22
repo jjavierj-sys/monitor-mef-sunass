@@ -17,8 +17,8 @@ st.markdown("""
     <style>
     .block-container { padding-top: 3.0rem; padding-bottom: 1.5rem; max-width: 900px; }
     div[data-testid="stMetric"] {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
+        background-color: var(--secondary-background-color);
+        border: 1px solid rgba(128, 128, 128, 0.25);
         padding: 10px 12px;
         border-radius: 10px;
     }
