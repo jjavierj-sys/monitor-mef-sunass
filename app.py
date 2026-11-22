@@ -30,19 +30,18 @@ def leer_pestana(nombre):
         return pd.DataFrame()
     df = pd.DataFrame(regs)
     
-    # Convertir fecha serial de Excel/Sheets (ej. 46347) a formato legible YYYY-MM-DD
+    # Convertir fecha serial (ej. 46347) a YYYY-MM-DD
     if 'Fecha' in df.columns:
         df['Fecha'] = df['Fecha'].apply(
             lambda x: pd.to_datetime(x, unit='D', origin='1899-12-30').strftime('%Y-%m-%d')
             if isinstance(x, (int, float)) else str(x).strip()
         )
-    # Normalizar Meta, Fuente y Generica como texto limpio
-    if 'Meta' in df.columns:
-        df['Meta'] = df['Meta'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    if 'Fuente' in df.columns:
-        df['Fuente'] = df['Fuente'].astype(str).str.strip()
-    if 'Generica' in df.columns:
-        df['Generica'] = df['Generica'].apply(lambda x: f"{float(x):.1f}" if str(x).replace('.','',1).isdigit() else str(x).strip())
+    # Extraer Meta, Fuente y Generica limpios desde ConsultaRealizada ("61 | RDR | 2.1 | Acumulado")
+    if 'ConsultaRealizada' in df.columns:
+        partes = df['ConsultaRealizada'].astype(str).str.split('|')
+        df['Meta'] = partes.str.str.strip()
+        df['Fuente'] = partes.str.str.strip()
+        df['Generica'] = partes.str.str.strip()
         
     return df
 
@@ -62,14 +61,17 @@ else:
     
     # 1. Filtro rápido Área DRE (Metas 1 y 61)
     solo_dre = st.sidebar.checkbox("Solo Área DRE (Metas 1 y 61)")
-    metas_default = ['1', '61'] if solo_dre else ['1', '61', '160']
-    metas = st.sidebar.multiselect("Meta:", ['1', '61', '160'], default=metas_default)
+    metas_disp = sorted(df_cons['Meta'].unique())
+    metas_default = [m for m in ['1', '61'] if m in metas_disp] if solo_dre else metas_disp
+    metas = st.sidebar.multiselect("Meta:", metas_disp, default=metas_default)
     
     # 2. Filtro de Fuente (RO y RDR)
-    fuentes = st.sidebar.multiselect("Fuente:", ['RO', 'RDR'], default=['RO', 'RDR'])
+    fuentes_disp = sorted(df_cons['Fuente'].unique())
+    fuentes = st.sidebar.multiselect("Fuente:", fuentes_disp, default=fuentes_disp)
     
     # 3. Filtro de Genérica (2.1 y 2.3)
-    genericas = st.sidebar.multiselect("Genérica:", ['2.1', '2.3'], default=['2.1', '2.3'])
+    gen_disp = sorted(df_cons['Generica'].unique())
+    genericas = st.sidebar.multiselect("Genérica:", gen_disp, default=gen_disp)
     
     solo_cambios_dev = st.sidebar.checkbox("Solo con variación en Devengado (.Devengado)")
     solo_pim_mayor_0 = st.sidebar.checkbox("Solo PIM > 0", value=True)
