@@ -124,31 +124,40 @@ if "fecha_sel" not in st.session_state or st.session_state.fecha_sel not in fech
     st.session_state.fecha_sel = fechas[0]
 if "unidad_opt" not in st.session_state:
     st.session_state.unidad_opt = "DRE (Global)"
+if "fuente_opt" not in st.session_state:
+    st.session_state.fuente_opt = "Todas"
 if "gen_opt" not in st.session_state:
     st.session_state.gen_opt = "Todas"
 
 def limpiar_filtros():
     st.session_state.fecha_sel = fechas[0]
     st.session_state.unidad_opt = "DRE (Global)"
+    st.session_state.fuente_opt = "Todas"
     st.session_state.gen_opt = "Todas"
 
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
 
-# Filtros rápidos por Unidad Orgánica, Genérica y botón Limpiador
-f1, f2, f3 = st.columns([2, 2, 1.3])
+# Filtros rápidos en cuadrícula compacta 2x2
+f1, f2 = st.columns(2)
 unidad_opt = f1.selectbox(
     "Unidad Orgánica",
     ["DRE (Global)", "SRT", "SDEM"],
     key="unidad_opt"
 )
-gen_opt = f2.selectbox(
+fuente_opt = f2.selectbox(
+    "Fuente",
+    ["Todas", "RO", "RDR"],
+    key="fuente_opt"
+)
+
+f3, f4 = st.columns([2, 1.2])
+gen_opt = f3.selectbox(
     "Genérica",
     ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"],
     key="gen_opt"
 )
-
-with f3:
+with f4:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
     st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
 
@@ -171,13 +180,18 @@ def filtrar_generica(df):
         ]
     return df
 
-# Base filtrada por Fecha y Genérica
+# Base filtrada por Fecha, Fuente y Genérica
 df_fecha = filtrar_generica(df_cons[df_cons['Fecha'] == fecha_sel].copy())
+if fuente_opt != "Todas":
+    df_fecha = df_fecha[df_fecha['Fuente'] == fuente_opt]
+
 df_view = filtrar_unidad(df_fecha)
 
 # 4 KPIs Principales (con respaldo automático al último corte válido si hoy está vacío)
 if df_view.empty or df_view['PIM'].sum() == 0:
     df_hist_comb = filtrar_generica(filtrar_unidad(df_cons.copy()))
+    if fuente_opt != "Todas":
+        df_hist_comb = df_hist_comb[df_hist_comb['Fuente'] == fuente_opt]
     df_hist_comb = df_hist_comb[df_hist_comb['PIM'] > 0]
     if not df_hist_comb.empty:
         ultima_fec_valida = df_hist_comb['Fecha'].max()
@@ -300,7 +314,7 @@ with tab_movs:
             val_dif = row[col_dif]
             if abs(val_dif) >= 0.01:
                 movs.append({
-                    "Unidad": f"{row['Unidad']} | {row['Fuente']} | {row['Generica']}",
+                    "Unidad": f"{row['Unidad']} | {row['Generica']}",
                     "Específica": row["EspecificaCompleta"],
                     "Rubro": nombre_etapa,
                     "Acumulado": row[col_act],
@@ -332,6 +346,8 @@ with tab_mes:
     else:
         var_m = st.selectbox("Variable mensual", ["Devengado", "Certificacion", "Compromiso", "AtencionMensual", "Girado"], label_visibility="collapsed")
         df_m = filtrar_generica(filtrar_unidad(df_mens.copy()))
+        if fuente_opt != "Todas":
+            df_m = df_m[df_m['Fuente'] == fuente_opt]
 
         orden_meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"]
         res_m = df_m.groupby("Mes", as_index=False)[var_m].sum()
