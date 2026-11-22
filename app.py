@@ -237,7 +237,7 @@ else:
                     return ""
                 if var_sel == "%Ejec":
                     return f"{val:.2f}%" if (es_saldo or "Saldo" in modo_val) else f"{val:+.2f}%"
-                return f"S/ {val:,.2f}" if (es_saldo or "Saldo" in modo_val) else f"S/ {val:+,.2f}"
+                return f"{val:,.2f}" if (es_saldo or "Saldo" in modo_val) else f"{val:+,.2f}"
 
             dict_fmt = {}
             for c in cols_neutras:
