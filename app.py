@@ -17,15 +17,14 @@ NOMBRE_SHEET = "Historial_MEF_SUNASS"
 # --- CONEXIÓN A GOOGLE SHEETS ---
 @st.cache_resource
 def conectar_gsheets():
-    scopes = [
-        "https://googleapis.com" + "/auth/spreadsheets",
-        "https://googleapis.com" + "/auth/drive"
-    ]
-    info = json.loads(st.secrets["json_crudo"], strict=False)
-    info["auth_uri"] = "https://google.com" + "/o/oauth2/auth"
-    info["token_uri"] = "https://googleapis.com" + "/token"
+    s1 = "https://" + "www." + "googleapis.com" + "/auth/spreadsheets"
+    s2 = "https://" + "www." + "googleapis.com" + "/auth/drive"
     
-    creds = Credentials.from_service_account_info(info, scopes=scopes)
+    info = json.loads(st.secrets["json_crudo"], strict=False)
+    info["auth_uri"] = "https://" + "://google.com" + "/o/oauth2/auth"
+    info["token_uri"] = "https://" + "://googleapis.com" + "/token"
+    
+    creds = Credentials.from_service_account_info(info, scopes=[s1, s2])
     client = gspread.authorize(creds)
     return client.open(NOMBRE_SHEET).worksheet("datos")
 
@@ -79,8 +78,8 @@ def descargar_datos_mef():
       AND GENERICA IN ('1', '3')
     GROUP BY MES_EJE, META, FUENTE_FINANC_NOMBRE, GENERICA_NOMBRE, ESPECIFICA_DET, ESPECIFICA_DET_NOMBRE
     """
-    url = "https://mef.gob.pe"
-    resp = requests.get(url, params={"sql": sql}, timeout=60)
+    api_mef = "https://" + "datosabiertos.mef.gob.pe" + "/api/3/action/datastore_search_sql"
+    resp = requests.get(api_mef, params={"sql": sql}, timeout=60)
     data = resp.json()
     
     if data.get("success"):
@@ -183,4 +182,3 @@ else:
         file_name=f"SUNASS_MEF_{fecha_sel}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-  
