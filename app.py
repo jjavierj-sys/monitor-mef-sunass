@@ -31,6 +31,13 @@ st.markdown("""
         font-size: 0.85rem !important;
         vertical-align: middle !important;
     }
+        }
+    div[data-baseweb="select"] input {
+        caret-color: transparent !important;
+        pointer-events: none !important;
+    }
+    /* Mantiene bloques de 2 columnas en celular para evitar listas largas */
+
     /* Mantiene bloques de 2 columnas en celular para evitar listas largas */
     @media (max-width: 640px) {
         div[data-testid="stHorizontalBlock"] {
@@ -139,7 +146,6 @@ def limpiar_filtros():
 with col_fec:
     fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
 
-# Filtros rápidos en cuadrícula compacta 2x2
 f1, f2 = st.columns(2)
 unidad_opt = f1.selectbox(
     "Unidad Orgánica",
