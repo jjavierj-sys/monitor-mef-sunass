@@ -17,7 +17,7 @@ def conectar_gsheets():
     s1 = p + "www." + g + "/auth/spreadsheets"
     s2 = p + "www." + g + "/auth/drive"
     info = json.loads(st.secrets["json_crudo"], strict=False)
-    info["auth_uri"] = p + "accounts." + "://google.com"
+    info["auth_uri"] = p + "://google.com"
     info["token_uri"] = p + "oauth2." + g + "/token"
     creds = Credentials.from_service_account_info(info, scopes=[s1, s2])
     return gspread.authorize(creds).open(NOMBRE_SHEET)
@@ -25,27 +25,10 @@ def conectar_gsheets():
 @st.cache_data(ttl=60)
 def leer_pestana(nombre):
     wb = conectar_gsheets()
-    regs = wb.worksheet(nombre).get_all_records(value_render_option='UNFORMATTED_VALUE')
-    if not regs:
-        return pd.DataFrame()
-    df = pd.DataFrame(regs)
-    
-    # Convertir fecha serial (ej. 46347) a YYYY-MM-DD
-    if 'Fecha' in df.columns:
-        df['Fecha'] = df['Fecha'].apply(
-            lambda x: pd.to_datetime(x, unit='D', origin='1899-12-30').strftime('%Y-%m-%d')
-            if isinstance(x, (int, float)) else str(x).strip()
-        )
-    # Extraer Meta, Fuente y Generica limpios desde ConsultaRealizada ("61 | RDR | 2.1 | Acumulado")
-    if 'ConsultaRealizada' in df.columns:
-        partes = df['ConsultaRealizada'].astype(str).str.split('|', expand=True)
-        df['Meta'] = partes.get(0, '').astype(str).str.strip()
-        df['Fuente'] = partes.get(1, '').astype(str).str.strip()
-        df['Generica'] = partes.get(2, '').astype(str).str.strip()
-        
-    return df
+    regs = wb.worksheet(nombre).get_all_records()
+    return pd.DataFrame(regs) if regs else pd.DataFrame()
 
-if st.button("🔄 Refrescar Vista Web", type="primary"):
+if st.button("🔄 Refrescar Datos desde Google Sheets", type="primary"):
     st.cache_data.clear()
     st.rerun()
 
@@ -55,43 +38,25 @@ df_mens = leer_pestana("tblMensual")
 if df_cons.empty:
     st.info("Ejecuta 'Actualizar Todo MEF (Hoy)' desde el menú de tu Google Sheet para cargar los datos.")
 else:
+    # Filtros laterales replicating tus columnas auxiliares
     st.sidebar.header("Filtros Rápidos")
-    fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
-    fecha_sel = st.sidebar.selectbox("Fecha de corte:", fechas)
-    
-    # 1. Filtro rápido Área DRE (Metas 1 y 61)
-    solo_dre = st.sidebar.checkbox("Solo Área DRE (Metas 1 y 61)")
-    metas_disp = sorted(df_cons['Meta'].unique())
-    metas_default = [m for m in ['1', '61'] if m in metas_disp] if solo_dre else metas_disp
-    metas = st.sidebar.multiselect("Meta:", metas_disp, default=metas_default)
-    
-    # 2. Filtro de Fuente (RO y RDR)
-    fuentes_disp = sorted(df_cons['Fuente'].unique())
-    fuentes = st.sidebar.multiselect("Fuente:", fuentes_disp, default=fuentes_disp)
-    
-    # 3. Filtro de Genérica (2.1 y 2.3)
-    gen_disp = sorted(df_cons['Generica'].unique())
-    genericas = st.sidebar.multiselect("Genérica:", gen_disp, default=gen_disp)
-    
+    fechas = sorted(df_cons['Fecha'].astype(str).unique(), reverse=True)
+    fecha_sel = st.sidebar.selectbox("Fecha:", fechas)
+    metas = st.sidebar.multiselect("Meta:", ['1', '61', '160'], default=['1', '61', '160'], format_func=str)
     solo_cambios_dev = st.sidebar.checkbox("Solo con variación en Devengado (.Devengado)")
     solo_pim_mayor_0 = st.sidebar.checkbox("Solo PIM > 0", value=True)
 
-    df_view = df_cons[
-        (df_cons['Fecha'] == fecha_sel) & 
-        (df_cons['Meta'].isin(metas)) &
-        (df_cons['Fuente'].isin(fuentes)) &
-        (df_cons['Generica'].isin(genericas))
-    ]
+    df_view = df_cons[(df_cons['Fecha'].astype(str) == fecha_sel) & (df_cons['Meta'].astype(str).isin(metas))]
     if solo_pim_mayor_0:
         df_view = df_view[df_view['PIM.'] == 'PIM>0']
     if solo_cambios_dev:
         df_view = df_view[df_view['.Devengado'] == '.Devengado']
 
-    # KPIs superiores exactos
+    # KPIs superiores
     c1, c2, c3, c4 = st.columns(4)
-    pim_tot = pd.to_numeric(df_view['PIM'], errors='coerce').fillna(0).sum()
-    dev_tot = pd.to_numeric(df_view['Devengado'], errors='coerce').fillna(0).sum()
-    dif_dev = pd.to_numeric(df_view['Dif_Devengado'], errors='coerce').fillna(0).sum()
+    pim_tot = pd.to_numeric(df_view['PIM'], errors='coerce').sum()
+    dev_tot = pd.to_numeric(df_view['Devengado'], errors='coerce').sum()
+    dif_dev = pd.to_numeric(df_view['Dif_Devengado'], errors='coerce').sum()
     pct_tot = (dev_tot / pim_tot * 100) if pim_tot > 0 else 0
 
     c1.metric("PIM Total", f"S/ {pim_tot:,.2f}")
