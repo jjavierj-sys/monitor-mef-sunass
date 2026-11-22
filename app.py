@@ -59,38 +59,54 @@ def guardar_foto_hoy(df_hoy):
 
 # --- CONSULTA ÚNICA AL MEF (SUNASS) ---
 def descargar_datos_mef():
-    sql = f"""
-    SELECT 
-        CAST(MES_EJE AS INTEGER) as mes_eje,
-        META as meta,
-        FUENTE_FINANC_NOMBRE as fuente,
-        GENERICA_NOMBRE as generica,
-        ESPECIFICA_DET as especifica,
-        ESPECIFICA_DET_NOMBRE as especifica_nombre,
-        SUM(CAST(MONTO_PIM AS NUMERIC)) as pim,
-        SUM(CAST(MONTO_CERTIFICADO AS NUMERIC)) as cert,
-        SUM(CAST(MONTO_COMPROMETIDO_ANUAL AS NUMERIC)) as comp,
-        SUM(CAST(MONTO_COMPROMETIDO AS NUMERIC)) as at_mensual,
-        SUM(CAST(MONTO_DEVENGADO AS NUMERIC)) as dev,
-        SUM(CAST(MONTO_GIRADO AS NUMERIC)) as gir
-    FROM "{RESOURCE_ID}"
-    WHERE PLIEGO = '021'
-      AND META IN ('0001', '0061', '0160')
-      AND FUENTE_FINANC IN ('1', '2')
-      AND GENERICA IN ('1', '3')
-    GROUP BY MES_EJE, META, FUENTE_FINANC_NOMBRE, GENERICA_NOMBRE, ESPECIFICA_DET, ESPECIFICA_DET_NOMBRE
-    """
-    api_mef = "https://" + "datosabiertos." + "mef.gob.pe/api/3/action/datastore_search_sql"
-    resp = requests.get(api_mef, params={"sql": sql}, timeout=60)
-    data = resp.json()
+    base_mef = "https://" + "datosabiertos." + "mef.gob.pe/api/3/action/datastore_search"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
+    # Filtramos directamente por Pliego 021 (SUNASS) y traemos sus registros del año
+    params = {
+        "resource_id": RESOURCE_ID,
+        "filters": json.dumps({"PLIEGO": "021"}),
+        "limit": 100000
+    }
+    
+    resp = requests.get(base_mef, params=params, headers=headers, timeout=90)
+    if resp.status_code != 200 or not resp.text.strip():
+        st.error(f"El servidor del MEF respondió con estado {resp.status_code}. Intenta nuevamente en unos segundos.")
+        return pd.DataFrame()
+        
+    data = resp.json()
     if data.get("success"):
         df = pd.DataFrame(data["result"]["records"])
-        cols_num = ['pim', 'cert', 'comp', 'at_mensual', 'dev', 'gir']
-        for col in cols_num:
+        if df.empty:
+            return df
+            
+        # Filtrar exactamente tus Metas, Fuentes y Genéricas de SUNASS
+        df['META'] = df['META'].astype(str).str.zfill(4)
+        df['FUENTE_FINANC'] = df['FUENTE_FINANC'].astype(str)
+        df['GENERICA'] = df['GENERICA'].astype(str)
+        
+        df = df[
+            (df['META'].isin(['0001', '0061', '0160'])) &
+            (df['FUENTE_FINANC'].isin(['1', '2'])) &
+            (df['GENERICA'].isin(['1', '3']))
+        ].copy()
+        
+        # Convertir montos a números
+        cols_mef = ['MONTO_PIM', 'MONTO_CERTIFICADO', 'MONTO_COMPROMETIDO_ANUAL', 'MONTO_COMPROMETIDO', 'MONTO_DEVENGADO', 'MONTO_GIRADO']
+        for col in cols_mef:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        df['mes_eje'] = pd.to_numeric(df['mes_eje'], errors='coerce').astype(int)
-        return df
+        df['MES_EJE'] = pd.to_numeric(df['MES_EJE'], errors='coerce').fillna(0).astype(int)
+        
+        # Agrupar hasta nivel de Específica Detallada
+        df_grp = df.groupby(
+            ['MES_EJE', 'META', 'FUENTE_FINANC_NOMBRE', 'GENERICA_NOMBRE', 'ESPECIFICA_DET', 'ESPECIFICA_DET_NOMBRE'],
+            as_index=False
+        )[cols_mef].sum()
+        
+        df_grp.columns = ['mes_eje', 'meta', 'fuente', 'generica', 'especifica', 'especifica_nombre', 'pim', 'cert', 'comp', 'at_mensual', 'dev', 'gir']
+        return df_grp
     return pd.DataFrame()
 
 # --- CÁLCULO DE BRECHAS E INDICADORES ---
