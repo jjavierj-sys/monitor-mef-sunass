@@ -128,9 +128,10 @@ unidad_opt = f1.selectbox(
 )
 gen_opt = f2.selectbox(
     "Genérica",
-    ["Todas", "2.1", "2.3"],
+    ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"],
     key="gen_opt"
 )
+
 with f3:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
     st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
@@ -142,18 +143,25 @@ def filtrar_unidad(df):
         return df[df['Unidad'] == "SDEM"]
     return df
 
-# Base filtrada por Fecha y Genérica
-df_fecha = df_cons[df_cons['Fecha'] == fecha_sel].copy()
-if gen_opt != "Todas":
-    df_fecha = df_fecha[df_fecha['Generica'].astype(str).str.startswith(gen_opt)]
+def filtrar_generica(df):
+    if gen_opt == "2.1":
+        return df[df['Generica'].astype(str).str.startswith("2.1")]
+    elif gen_opt == "2.3":
+        return df[df['Generica'].astype(str).str.startswith("2.3")]
+    elif gen_opt == "2.3 (Sin practicantes)":
+        return df[
+            (df['Generica'].astype(str).str.startswith("2.3")) &
+            (~df['EspecificaCompleta'].astype(str).str.startswith("2.3.2.7.5.2"))
+        ]
+    return df
 
+# Base filtrada por Fecha y Genérica
+df_fecha = filtrar_generica(df_cons[df_cons['Fecha'] == fecha_sel].copy())
 df_view = filtrar_unidad(df_fecha)
 
 # 4 KPIs Principales (con respaldo automático al último corte válido si hoy está vacío)
 if df_view.empty or df_view['PIM'].sum() == 0:
-    df_hist_comb = filtrar_unidad(df_cons.copy())
-    if gen_opt != "Todas":
-        df_hist_comb = df_hist_comb[df_hist_comb['Generica'].astype(str).str.startswith(gen_opt)]
+    df_hist_comb = filtrar_generica(filtrar_unidad(df_cons.copy()))
     df_hist_comb = df_hist_comb[df_hist_comb['PIM'] > 0]
     if not df_hist_comb.empty:
         ultima_fec_valida = df_hist_comb['Fecha'].max()
@@ -183,20 +191,19 @@ with tab_resumen:
     if df_view.empty:
         st.warning("Sin datos para los filtros seleccionados.")
     else:
-        res = df_view.groupby(["Unidad", "Generica"], as_index=False)[
+        res = df_view.groupby(["Unidad"], as_index=False)[
             ["PIM", "Certificacion", "Devengado"]
         ].sum()
         res["%Ejec."] = res.apply(lambda r: (r["Devengado"] / r["PIM"] * 100) if r["PIM"] > 0 else 0.0, axis=1)
 
         tot_row = pd.DataFrame([{
             "Unidad": f"TOTAL {unidad_opt}",
-            "Generica": "",
             "PIM": res["PIM"].sum(),
             "Certificacion": res["Certificacion"].sum(),
             "Devengado": res["Devengado"].sum(),
             "%Ejec.": pct_tot
         }])
-        tabla_res = pd.concat([res[["Unidad", "Generica", "PIM", "Certificacion", "Devengado", "%Ejec."]], tot_row], ignore_index=True)
+        tabla_res = pd.concat([res[["Unidad", "PIM", "Certificacion", "Devengado", "%Ejec."]], tot_row], ignore_index=True)
 
         def fmt_cero_blanco(v, dec=2, suf=""):
             return "" if abs(v) < 1e-6 else f"{v:,.{dec}f}{suf}"
@@ -308,9 +315,7 @@ with tab_mes:
         st.info("Sin datos mensuales cargados.")
     else:
         var_m = st.selectbox("Variable mensual", ["Devengado", "Certificacion", "Compromiso", "AtencionMensual", "Girado"], label_visibility="collapsed")
-        df_m = filtrar_unidad(df_mens.copy())
-        if gen_opt != "Todas":
-            df_m = df_m[df_m['Generica'].astype(str).str.startswith(gen_opt)]
+        df_m = filtrar_generica(filtrar_unidad(df_mens.copy()))
 
         orden_meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Setiembre", "Octubre", "Noviembre", "Diciembre"]
         res_m = df_m.groupby("Mes", as_index=False)[var_m].sum()
