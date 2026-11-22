@@ -137,26 +137,29 @@ def limpiar_filtros():
     st.session_state.gen_opt = "Todas"
 
 with col_fec:
-    fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
+    fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed", searchable=False)
 
-# Filtros rápidos en cuadrícula compacta 2x2
+# Filtros rápidos en cuadrícula compacta 2x2 (sin teclado táctil en móvil)
 f1, f2 = st.columns(2)
 unidad_opt = f1.selectbox(
     "Unidad Orgánica",
     ["DRE (Global)", "SRT", "SDEM"],
-    key="unidad_opt"
+    key="unidad_opt",
+    searchable=False
 )
 fuente_opt = f2.selectbox(
     "Fuente",
     ["Todas", "RO", "RDR"],
-    key="fuente_opt"
+    key="fuente_opt",
+    searchable=False
 )
 
 f3, f4 = st.columns([2, 1.2])
 gen_opt = f3.selectbox(
     "Genérica",
     ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"],
-    key="gen_opt"
+    key="gen_opt",
+    searchable=False
 )
 with f4:
     st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
