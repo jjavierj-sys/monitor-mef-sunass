@@ -854,7 +854,7 @@ else:
         else:
             cols_ver = ["Número de registro", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
             cols_ver = [c for c in cols_ver if c in df_b.columns]
-            st.dataframe(df_b[cols_ver], use_container_width=True, hide_index=True)
+            st.table(df_b[cols_ver].set_index("Número de registro"))
 
     with t_gestion:
         res_tg = df_siged.groupby("TIPO_GESTION", as_index=False).agg(
