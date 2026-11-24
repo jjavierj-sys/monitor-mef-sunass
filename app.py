@@ -845,7 +845,7 @@ else:
 
     with t_bandeja:
         f_rubro = st.selectbox("Filtrar tipo de trámite pendiente", ["Todos de interés"] + rubros_interes)
-        df_b = df_pend_interes.copy()
+        df_b = df_pend_interes.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
         if f_rubro != "Todos de interés":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
 
