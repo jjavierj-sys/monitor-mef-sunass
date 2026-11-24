@@ -826,7 +826,7 @@ else:
     rubros_interes = [
         "01. PASAJES", "02. VIÁTICOS", "02. VIÁTICOS PAGADOS",
         "03. RENDICIONES", "03. RENDICIONES PAGADAS",
-        "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO", "08. PRESUPUESTO"
+        "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
     df_pend_interes = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_interes)].copy()
     if not df_pend_interes.empty:
