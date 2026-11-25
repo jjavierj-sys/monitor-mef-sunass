@@ -145,7 +145,18 @@ def clasificar_subtipo_tecnico(txt):
     return ""
 
 def clasificar_tipo_gestion(row):
-    txt = str(row.get("Asunto", "")).lower()
+    asunto_low = str(row.get("Asunto", "")).lower()
+
+    # Prioridad documental previa (para no contaminar Gasto/Devengado)
+    if any(k in asunto_low for k in ["revision de tdr", "revisión de tdr", "revision del tdr", "revisión del tdr", "opinion tecnica de tdr", "opinión técnica de tdr"]):
+        return "07. REVISIÓN DE TDR"
+    if any(k in asunto_low for k in ["cuadro multianual", "cmn", "inclusion en el cmn", "inclusión en el cmn", "exclusion del cmn", "exclusión del cmn"]):
+        return "09. CMN"
+    if any(k in asunto_low for k in ["modificacion presupuestal", "modificación presupuestal", "nota modificatoria", "notas modificatorias", "habilitacion presupuestal", "habilitación presupuestal"]):
+        return "08. PRESUPUESTO / MODIFICACIONES"
+    if any(k in asunto_low for k in ["certificacion", "certificación", "ccp", "ampliacion de pasajes", "ampliación de pasajes", "ampliacion presupuestal", "ampliación presupuestal", "rebaja de certificacion", "rebaja de certificación", "rebaja de ccp"]):
+        return "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA"
+
     areaH = str(row.get("Área remitente", "")).lower()
     areaE = str(row.get("Ubicación Área", "")).lower()
     comentF = str(row.get("Observación", "")).lower()
@@ -796,7 +807,8 @@ else:
     cols_exp_gasto = [
         "Exp.Solicitud", "Exp.Rebaja", "Exp.Rebaja2", "Exp.Rebaja3",
         "Exp.Devengado", "Exp.Dev.De.Ref.1", "Exp.Dev.De.Ref.2",
-        "Exp.Trámite.Presupuestal", "Exp.Rendición", "Exp.Rend.De.Ref.1", "Exp.Informe"
+        "Exp.Trámite.Presupuestal", "Exp.Rendición", "Exp.Rend.De.Ref.1", "Exp.Informe",
+        "Exp.Revisión.TDR", "Exp.Informe.Ref"
     ]
     exps_gasto_set = set()
     if not df_gasto_pre.empty:
@@ -963,43 +975,68 @@ else:
 
         return "🆕 Nuevo registro para GASTO"
 
-    rubros_interes = [
+    rubros_gasto = [
         "01. PASAJES", "01. PASAJES (DEVENGUE UA)", "02. VIÁTICOS", "02. VIÁTICOS PAGADOS",
         "03. RENDICIONES", "03. RENDICIONES PAGADAS",
         "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
-    df_pend_interes = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_interes)].copy()
-    if not df_pend_interes.empty:
-        df_pend_interes["Sugerencia_GASTO"] = df_pend_interes.apply(sugerir_imputacion, axis=1)
+    rubros_presupuesto = [
+        "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA",
+        "07. REVISIÓN DE TDR",
+        "08. PRESUPUESTO / MODIFICACIONES",
+        "09. CMN"
+    ]
 
+    df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
+    if not df_pend_gasto.empty:
+        df_pend_gasto["Sugerencia_GASTO"] = df_pend_gasto.apply(sugerir_imputacion, axis=1)
     if filas_ocultas:
         df_ocultos = pd.DataFrame(filas_ocultas)
-        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)
+        df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
 
-    
-    s1, s2 = st.columns(2)
+    df_pend_presup = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_presupuesto)].copy()
+    if not df_pend_presup.empty:
+        df_pend_presup["Sugerencia_GASTO"] = "📑 Registrar en fila de control presupuestal (CCP / Modificación / CMN / TDR)"
+
+    s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
-    s2.metric("🆕 Pendientes de Interés", f"{len(df_pend_interes):,}", "Listos para imputar en GASTO")
+    s2.metric("🆕 Pendientes GASTO", f"{len(df_pend_gasto):,}", "Para devengue / ejecución")
+    s3.metric("📑 Pendientes PRESUPUESTO", f"{len(df_pend_presup):,}", "Certif. / Modif. / CMN / TDR")
 
-    t_bandeja, t_gestion, t_vuelos, t_viaticos = st.tabs([
-        "🆕 Bandeja Pendientes (SIGED2)",
+    t_bandeja, t_presup, t_gestion, t_vuelos, t_viaticos = st.tabs([
+        "🆕 Bandeja GASTO (SIGED2)",
+        "📑 Bandeja PRESUPUESTO / CMN / TDR",
         "📊 Por Tipo de Gestión",
         "✈️ Vuelos (USD/PEN)",
         "🧳 Viáticos y Rendiciones"
     ])
 
     with t_bandeja:
-        f_rubro = st.selectbox("Filtrar tipo de trámite pendiente", ["Todos de interés"] + rubros_interes)
-        df_b = df_pend_interes.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
-        if f_rubro != "Todos de interés":
+        f_rubro = st.selectbox("Filtrar trámite de GASTO pendiente", ["Todos de GASTO"] + rubros_gasto)
+        df_b = df_pend_gasto.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
+        if f_rubro != "Todos de GASTO":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
 
         if df_b.empty:
-            st.success("🎉 ¡Cero expedientes pendientes por imputar en este rubro!")
+            st.success("🎉 ¡Cero expedientes pendientes por imputar en GASTO!")
         else:
             cols_ver = ["Número de registro", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
             cols_ver = [c for c in cols_ver if c in df_b.columns]
             st.table(df_b[cols_ver].set_index("Número de registro"))
+
+    with t_presup:
+        f_pres = st.selectbox("Filtrar trámite presupuestal / CMN / TDR", ["Todos de Presupuesto"] + rubros_presupuesto)
+        df_p_view = df_pend_presup.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
+        if f_pres != "Todos de Presupuesto":
+            df_p_view = df_p_view[df_p_view["TIPO_GESTION"] == f_pres]
+
+        if df_p_view.empty:
+            st.success("🎉 ¡Cero expedientes pendientes de Certificación, Modificación, CMN o TDR!")
+        else:
+            cols_ver_p = ["Número de registro", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
+            cols_ver_p = [c for c in cols_ver_p if c in df_p_view.columns]
+            st.table(df_p_view[cols_ver_p].set_index("Número de registro"))
+
 
     with t_gestion:
         res_tg = df_siged.groupby("TIPO_GESTION", as_index=False).agg(
