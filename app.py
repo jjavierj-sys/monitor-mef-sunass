@@ -19,6 +19,11 @@ st.set_page_config(
 st.markdown("""
     <style>
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 1100px; }
+        [data-stale="true"], .stElementContainer[data-stale="true"], div[data-testid="stVerticalBlock"] > div[data-stale="true"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
 
     div[data-testid="stMetric"] {
         background-color: var(--secondary-background-color);
