@@ -47,6 +47,13 @@ st.markdown("""
         padding: 8px 8px !important;
     }
 
+    table td:nth-child(1), table th:nth-child(1) {
+        white-space: nowrap !important;
+        min-width: 125px !important;
+    }
+    table td:nth-child(2), table th:nth-child(2) {
+        white-space: nowrap !important;
+    }
     table td:nth-child(3), table th:nth-child(3) {
         min-width: 145px !important;
     }
