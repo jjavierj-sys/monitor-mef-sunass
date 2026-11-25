@@ -808,9 +808,9 @@ else:
     c_api, c_up = st.columns([1.3, 1.7])
     with c_api:
         if st.button("🔄 Sincronizar SIGED (API SUNASS)", type="primary", use_container_width=True):
-            with st.spinner("Sincronizando SIGED, SUNASS Global (4 trimestres) y Documentos..."):
+            with st.spinner("Sincronizando SIGED, SUNASS Global (completo) y Documentos..."):
                 anio_actual = datetime.now().year
-                df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual)
+                df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
                 if not df_nuevo_siged.empty:
                     wb = conectar_gsheets()
                     guardar_dataframe_en_sheet(wb, "SIGED_Consolidado", df_nuevo_siged)
@@ -818,7 +818,7 @@ else:
                     guardar_dataframe_en_sheet(wb, "Documentos_Emitidos", df_nuevo_docs)
                     st.cache_data.clear()
                     st.success(
-                        f"¡Sincronizado! SIGED: {len(df_nuevo_siged):,} | "
+                        f"¡Listo! SIGED: {len(df_nuevo_siged):,} | "
                         f"SUNASS Global: {len(df_nuevo_sunass):,} | Docs: {len(df_nuevo_docs):,}"
                     )
                     if errs:
@@ -846,8 +846,8 @@ else:
                 df_m_siged = pd.concat(lotes_manual, ignore_index=True).drop_duplicates(subset=["Número de registro"])
                 clasif = df_m_siged.apply(clasificar_tipo_gestion, axis=1)
                 df_m_siged["COLUMNA AUXILIAR"] = "1"
-                df_m_siged["TIPO_GESTION"] = [c[0] for c in clasif]
-                df_m_siged["SUBTIPO_TÉCNICO"] = [c[1] for c in clasif]
+                df_m_siged["TIPO_GESTION"] = [c for c in clasif]
+                df_m_siged["SUBTIPO_TÉCNICO"] = [c for c in clasif]
                 wb = conectar_gsheets()
                 guardar_dataframe_en_sheet(wb, "SIGED_Consolidado", df_m_siged)
                 st.cache_data.clear()
@@ -865,16 +865,14 @@ else:
 
     exps_usados = set(exps_gasto_set)
     if not df_anulados.empty:
-        col_anul = df_anulados.columns[0]
+        col_anul = df_anulados.columns
         vals_a = df_anulados[col_anul].dropna().astype(str).str.strip().str.upper()
         exps_usados.update(v for v in vals_a if v.startswith("202"))
 
     df_siged["Número de registro"] = df_siged["Número de registro"].astype(str).str.strip().str.upper()
     df_pendientes = df_siged[~df_siged["Número de registro"].isin(exps_usados)].copy()
 
-    # =================================================================
-    # DETECCIÓN DE EXPEDIENTES OCULTOS DE DEVENGUE EN OBSERVACIONES (VUELOS/PASAJES)
-    # =================================================================
+    # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
     filas_ocultas = []
     if "Observación" in df_siged.columns:
         mapa_sunass = {}
@@ -886,7 +884,6 @@ else:
         for _, r_orig in df_siged.iterrows():
             exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
             obs = str(r_orig.get("Observación", ""))
-            # Solo analizar expedientes de solicitud ya registrados en GASTO (como vuelos/pasajes)
             if exp_orig in exps_gasto_set and obs:
                 for exp_citado in extraer_expedientes_en_texto(obs):
                     if exp_citado != exp_orig and exp_citado not in exps_usados and exp_citado not in exps_ya_en_pend:
@@ -895,12 +892,11 @@ else:
                         asunto_s = info_s.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
                         area_s = info_s.get("Ubicación Área", "UA / Tesorería")
                         pers_s = info_s.get("Ubicación Persona", "")
-                        # Buscar quién es la persona en GASTO para esa solicitud original
                         pers_gasto = ""
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+                                pers_gasto = f" ({m_g.iloc.get('Persona', '')})"
 
                         filas_ocultas.append({
                             "Número de registro": exp_citado,
@@ -923,7 +919,7 @@ else:
             if "SIAF" in df_gasto.columns:
                 match = df_gasto[df_gasto["SIAF"].astype(str).str.strip().str.lstrip("0") == num_siaf]
                 if not match.empty:
-                    r0 = match.iloc[0]
+                    r0 = match.iloc
                     return f"🔗 SIAF {num_siaf} -> {r0.get('Persona', '')} | {r0.get('Genérica', '')} (Rend: {r0.get('Exp.Rendición', '')})"
             return f"🔍 SIAF {num_siaf} detectado (no hallado en GASTO)"
 
@@ -950,8 +946,7 @@ else:
 
     if filas_ocultas:
         df_ocultos = pd.DataFrame(filas_ocultas)
-        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)
-        
+        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)      
     
     s1, s2 = st.columns(2)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
