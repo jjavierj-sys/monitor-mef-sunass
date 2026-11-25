@@ -911,6 +911,48 @@ else:
                             "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                         })
 
+    def sugerir_imputacion(row):
+        asunto = str(row.get("Asunto", ""))
+        tipo = str(row.get("TIPO_GESTION", ""))
+        if df_gasto.empty:
+            return "Sin base GASTO"
+
+        m_siaf = re.search(r"siaf[^\d]{0,8}0*(\d{2,6})", asunto, re.IGNORECASE)
+        if m_siaf:
+            num_siaf = m_siaf.group(1)
+            if "SIAF" in df_gasto.columns:
+                match = df_gasto[df_gasto["SIAF"].astype(str).str.strip().str.lstrip("0") == num_siaf]
+                if not match.empty:
+                    r0 = match.iloc[0]
+                    return f"🔗 SIAF {num_siaf} -> {r0.get('Persona', '')} | {r0.get('Genérica', '')} (Rend: {r0.get('Exp.Rendición', '')})"
+            return f"🔍 SIAF {num_siaf} detectado (no hallado en GASTO)"
+
+        if "ENTREGABLE" in tipo and "Persona" in df_gasto.columns and "GASTO" in df_gasto.columns:
+            por_dev = df_gasto[df_gasto["GASTO"].astype(str).str.upper() == "POR DEVENGAR"]
+            asunto_low = asunto.lower()
+            for _, rg in por_dev.iterrows():
+                pers = str(rg.get("Persona", "")).strip()
+                if len(pers) > 5:
+                    apellidos = [p.lower() for p in pers.split() if len(p) > 3]
+                    if sum(1 for a in apellidos if a in asunto_low) >= 2:
+                        return f"📄 Cuota pendiente -> {pers} ({rg.get('OS', '')} | Mes {rg.get('Mes.Devengue', '')})"
+
+        return "🆕 Nuevo registro para GASTO"
+
+    rubros_interes = [
+        "01. PASAJES", "01. PASAJES (DEVENGUE UA)", "02. VIÁTICOS", "02. VIÁTICOS PAGADOS",
+        "03. RENDICIONES", "03. RENDICIONES PAGADAS",
+        "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
+    ]
+    df_pend_interes = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_interes)].copy()
+    if not df_pend_interes.empty:
+        df_pend_interes["Sugerencia_GASTO"] = df_pend_interes.apply(sugerir_imputacion, axis=1)
+
+    if filas_ocultas:
+        df_ocultos = pd.DataFrame(filas_ocultas)
+        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)
+  
+    
     s1, s2 = st.columns(2)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
     s2.metric("🆕 Pendientes de Interés", f"{len(df_pend_interes):,}", "Listos para imputar en GASTO")
