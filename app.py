@@ -331,7 +331,6 @@ def descargar_url_siged(tarea):
 def descargar_siged_completo_desde_api(anio, exps_gasto=None):
     p = "https://"
     base_exp = p + "api.sunass.gob.pe/api-sgd/reporte/busqueda/expediente"
-    base_doc = p + "api.sunass.gob.pe/api-sgd/reporte/busqueda/documentos"
 
     tareas = []
     areas = [("DRE", "8"), ("SDEM", "353"), ("SRT", "352")]
@@ -341,49 +340,29 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             url = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&{param_area}={area_cod}"
             tareas.append((f"SIGED_{area_nom}_{tipo_nom}", url, {"Grupo": "SIGED", "Tipo": tipo_nom, "Área": area_nom}))
 
-    for area_nom, area_cod in areas:
-        url = f"{base_doc}?area={area_cod}&fechaDesde=01/01/{anio}&fechaHasta=31/12/{anio}"
-        tareas.append((f"DOC_{area_nom}", url, {"Grupo": "DOCS", "Área": area_nom}))
-
-    lotes_siged, lotes_docs, errores = [], [], []
+    lotes_siged, errores = [], []
     with ThreadPoolExecutor(max_workers=6) as executor:
         for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas):
             if err:
                 errores.append(err)
             elif not df_res.empty:
-                grp = df_res["Grupo"].iloc[0]
                 df_res = df_res.drop(columns=["Grupo"])
-                if grp == "SIGED":
-                    lotes_siged.append(df_res)
-                elif grp == "DOCS":
-                    lotes_docs.append(df_res)
+                lotes_siged.append(df_res)
 
-    def preparar_expedientes(lotes):
-        if not lotes:
-            return pd.DataFrame()
-        df = pd.concat(lotes, ignore_index=True)
-        if "Número de registro" not in df.columns:
-            return pd.DataFrame()
-        df = df[df["Número de registro"].notna()].copy()
-        df["Número de registro"] = df["Número de registro"].astype(str).str.strip().str.upper()
-        df = df[df["Número de registro"] != "NÚMERO DE REGISTRO"]
-        df = df.drop_duplicates(subset=["Número de registro"], keep="first").reset_index(drop=True)
-        clasif = df.apply(clasificar_tipo_gestion, axis=1)
-        df["COLUMNA AUXILIAR"] = "1"
-        df["TIPO_GESTION"] = [c[0] for c in clasif]
-        df["SUBTIPO_TÉCNICO"] = [c[1] for c in clasif]
-        return df
+    if not lotes_siged:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), errores
 
-    df_siged = preparar_expedientes(lotes_siged)
+    df = pd.concat(lotes_siged, ignore_index=True)
+    df = df[df["Número de registro"].notna()].copy()
+    df["Número de registro"] = df["Número de registro"].astype(str).str.strip().str.upper()
+    df = df[df["Número de registro"] != "NÚMERO DE REGISTRO"]
+    df = df.drop_duplicates(subset=["Número de registro"], keep="first").reset_index(drop=True)
+    clasif = df.apply(clasificar_tipo_gestion, axis=1)
+    df["COLUMNA AUXILIAR"] = "1"
+    df["TIPO_GESTION"] = [c for c in clasif]
+    df["SUBTIPO_TÉCNICO"] = [c for c in clasif]
 
-    df_docs = pd.DataFrame()
-    if lotes_docs:
-        df_docs = pd.concat(lotes_docs, ignore_index=True)
-        col_id = "Número de documento" if "Número de documento" in df_docs.columns else df_docs.columns[0]
-        df_docs = df_docs[df_docs[col_id].notna()].drop_duplicates(subset=[col_id]).reset_index(drop=True)
-        df_docs["COLUMNA AUXILIAR"] = "1"
-
-    return df_siged, pd.DataFrame(), df_docs, errores
+    return df, pd.DataFrame(), pd.DataFrame(), errores
 
 def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
     if df is None or df.empty:
@@ -780,7 +759,7 @@ else:
     c_api, c_up = st.columns([1.3, 1.7])
     with c_api:
         if st.button("🔄 Sincronizar SIGED (API SUNASS)", type="primary", use_container_width=True):
-            with st.spinner("Sincronizando SIGED, SUNASS Global (completo) y Documentos..."):
+            with st.spinner("Sincronizando expedientes SIGED (DRE, SDEM, SRT)..."):
                 anio_actual = datetime.now().year
                 df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
                 if not df_nuevo_siged.empty:
