@@ -1036,7 +1036,7 @@ else:
                 st.caption("Mostrando todo el año")
 
         with f3:
-            tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().unique().tolist())
+            tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
             f_tipo_otro = st.selectbox("Filtrar por TIPO_GESTION", tipos_disp)
 
         df_d = df_otros_siged[
