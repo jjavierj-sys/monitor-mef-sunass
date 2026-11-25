@@ -870,6 +870,15 @@ else:
     df_pendientes = df_siged[~df_siged["Número de registro"].isin(exps_usados)].copy()
 
     # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
+    # Identificar qué Exp.Solicitud en GASTO aún NO tienen un Exp.Devengado asignado
+    solicitudes_sin_devengado = set()
+    if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns and "Exp.Devengado" in df_gasto.columns:
+        for _, rg in df_gasto.iterrows():
+            sol = str(rg.get("Exp.Solicitud", "")).strip().upper()
+            dev = str(rg.get("Exp.Devengado", "")).strip().upper()
+            if sol.startswith("202") and not dev.startswith("202"):
+                solicitudes_sin_devengado.add(sol)
+
     filas_ocultas = []
     if "Observación" in df_siged.columns:
         mapa_ua = {}
@@ -882,7 +891,8 @@ else:
         for _, r_orig in df_siged.iterrows():
             exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
             obs = str(r_orig.get("Observación", ""))
-            if exp_orig in exps_gasto_set and obs:
+            # SOLO revisar observaciones de solicitudes que AÚN NO tienen Exp.Devengado en GASTO
+            if exp_orig in solicitudes_sin_devengado and obs:
                 for exp_citado in extraer_expedientes_en_texto(obs):
                     if exp_citado == exp_orig:
                         continue
