@@ -869,14 +869,13 @@ else:
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
-                        if len(partes) == 3 and len(partes) == 5:
-                            num5 = partes
-                            # Generar candidatos insertando 0-9 en cualquier posición (pos 1 a 5) y 0 al inicio
-                            candidatos = [f"{partes}-{partes}-0{num5}"]
+                        if len(partes) == 3 and len(partes[2]) == 5:
+                            p_anio, p_tipo, num5 = partes[0], partes[1], partes[2]
+                            candidatos = [f"{p_anio}-{p_tipo}-0{num5}"]
                             for pos in range(1, 6):
                                 for d in range(10):
                                     cand_num = num5[:pos] + str(d) + num5[pos:]
-                                    candidatos.append(f"{partes}-{partes}-{cand_num}")
+                                    candidatos.append(f"{p_anio}-{p_tipo}-{cand_num}")
 
                             fec_orig = pd.to_datetime(r_orig.get("Fecha de creación", None), dayfirst=True, errors="coerce")
                             for cand in dict.fromkeys(candidatos):
