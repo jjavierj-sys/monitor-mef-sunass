@@ -441,10 +441,14 @@ modulo_activo = st.radio(
     label_visibility="collapsed"
 )
 
+_limpiador_vista = st.empty()
+_limpiador_vista.empty()
+
 # =====================================================================
 # MÓDULO 1: MONITOR PRESUPUESTAL MEF (INTACTO)
 # =====================================================================
 if modulo_activo == "💰 Presupuesto MEF":
+
     def mapear_unidad(meta):
         m = str(meta).strip()
         if m == "1":
@@ -772,18 +776,22 @@ if modulo_activo == "💰 Presupuesto MEF":
                 res_m.set_index("Mes").style.format({var_m: lambda x: "" if abs(x) < 1e-6 else f"{x:,.2f}"})
             )
 
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df_cons.to_excel(writer, index=False, sheet_name='Consolidado_DRE')
-        df_mens.to_excel(writer, index=False, sheet_name='Mensual_DRE')
+    @st.cache_data(ttl=600)
+    def generar_excel_mef_bytes(_df_c, _df_m):
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            _df_c.to_excel(writer, index=False, sheet_name='Consolidado_DRE')
+            _df_m.to_excel(writer, index=False, sheet_name='Mensual_DRE')
+        return buf.getvalue()
 
     st.download_button(
         label="📥 Descargar Excel DRE (.xlsx)",
-        data=buffer.getvalue(),
+        data=generar_excel_mef_bytes(df_cons, df_mens),
         file_name=f"SUNASS_DRE_{fecha_sel}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
+
 
 # =====================================================================
 # MÓDULO 2: SIGED & PROGRAMACIÓN DE GASTO (CRUCE INTELIGENTE)
