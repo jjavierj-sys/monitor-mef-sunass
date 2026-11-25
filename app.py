@@ -341,12 +341,44 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             url = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&{param_area}={area_cod}"
             tareas.append((f"SIGED_{area_nom}_{tipo_nom}", url, {"Grupo": "SIGED", "Tipo": tipo_nom, "Área": area_nom}))
 
-    trimestres = [
-        ("T1", f"01/01/{anio}", f"31/03/{anio}"),
-        ("T2", f"01/04/{anio}", f"30/06/{anio}"),
-        ("T3", f"01/07/{anio}", f"30/09/{anio}"),
-        ("T4", f"01/10/{anio}", f"31/12/{anio}"),
-    ]
+    # 1. Descargar primero los 6 reportes de DRE, SDEM y SRT
+    lotes_siged, lotes_docs, errores = [], [], []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas):
+            if err:
+                errores.append(err)
+            elif not df_res.empty:
+                grp = df_res["Grupo"].iloc[0]
+                df_res = df_res.drop(columns=["Grupo"])
+                if grp == "SIGED":
+                    lotes_siged.append(df_res)
+                elif grp == "DOCS":
+                    lotes_docs.append(df_res)
+
+    df_siged = preparar_expedientes(lotes_siged)
+
+    # 2. Detectar expedientes ocultos en Observaciones y consultarlos 1 a 1 en la API (0.3s c/u)
+    exps_referenciados = set()
+    if not df_siged.empty and "Observación" in df_siged.columns:
+        for obs in df_siged["Observación"].dropna():
+            exps_referenciados.update(extraer_expedientes_en_texto(obs))
+    if exps_gasto:
+        exps_referenciados.update(exps_gasto)
+    exps_faltantes = exps_referenciados - (set(df_siged["Número de registro"]) if not df_siged.empty else set())
+
+    lotes_sunass = []
+    if exps_faltantes:
+        tareas_esp = [
+            (f"EXP_{exp}", f"{base_exp}?busquedaNumeroRegistro={exp}", {"Grupo": "SUNASS"})
+            for exp in list(exps_faltantes)[:40]
+        ]
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas_esp):
+                if not err and not df_res.empty:
+                    lotes_sunass.append(df_res.drop(columns=["Grupo"]))
+
+    df_sunass = preparar_expedientes(lotes_sunass)
+
     for t_nom, f_ini, f_fin in trimestres:
         url = f"{base_exp}?busquedaFechaDesde={f_ini}&busquedaFechaHasta={f_fin}"
         tareas.append((f"SUNASS_{t_nom}", url, {"Grupo": "SUNASS", "Trimestre": t_nom}))
