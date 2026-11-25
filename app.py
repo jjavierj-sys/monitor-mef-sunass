@@ -47,6 +47,13 @@ st.markdown("""
         padding: 8px 8px !important;
     }
 
+    table td:nth-child(3), table th:nth-child(3) {
+        min-width: 145px !important;
+    }
+    table td:nth-child(4), table th:nth-child(4) {
+        min-width: 230px !important;
+    }
+
     div[data-baseweb="select"] input {
         caret-color: transparent !important;
         pointer-events: none !important;
@@ -871,6 +878,9 @@ else:
         exps_usados.update(v for v in vals_a if v.startswith("202"))
 
     df_siged["Número de registro"] = df_siged["Número de registro"].astype(str).str.strip().str.upper()
+    df_siged["TIPO_GESTION"] = df_siged["TIPO_GESTION"].fillna("").astype(str).str.strip()
+    df_siged.loc[df_siged["TIPO_GESTION"].isin(["", "0", "nan", "None"]), "TIPO_GESTION"] = "81. TÉCNICO RESIDUAL"
+
     df_pendientes = df_siged[~df_siged["Número de registro"].isin(exps_usados)].copy()
 
     # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
