@@ -64,8 +64,9 @@ st.markdown("""
     }
     div[data-testid="stTable"] th:nth-child(3),
     div[data-testid="stTable"] td:nth-child(3) {
-        width: 165px !important;
-        min-width: 165px !important;
+        white-space: nowrap !important;
+        padding-left: 14px !important;
+        min-width: 175px !important;
     }
     div[data-testid="stTable"] th:nth-child(4),
     div[data-testid="stTable"] td:nth-child(4) {
