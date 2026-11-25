@@ -340,12 +340,12 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             url = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&{param_area}={area_cod}"
             tareas.append((f"SIGED_{area_nom}_{tipo_nom}", url, {"Grupo": "SIGED", "Tipo": tipo_nom, "Área": area_nom}))
 
-    # Descargar en paralelo expedientes enviados por Unidad de Abastecimiento (UA = 45)
-    url_ua = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaEnviadoArea=45"
-    tareas.append(("UA_Enviado", url_ua, {"Grupo": "UA", "Tipo": "Enviado", "Área": "UA"}))
+    # Descargar en paralelo expedientes enviados Y recibidos/archivados dentro de UA (45)
+    tareas.append(("UA_Enviado", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaEnviadoArea=45", {"Grupo": "UA", "Tipo": "Enviado", "Área": "UA"}))
+    tareas.append(("UA_Recibido", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaRecibidoArea=45", {"Grupo": "UA", "Tipo": "Recibido", "Área": "UA"}))
 
     lotes_siged, lotes_ua, errores = [], [], []
-    with ThreadPoolExecutor(max_workers=7) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas):
             if err:
                 errores.append(err)
