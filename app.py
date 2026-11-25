@@ -340,9 +340,9 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             url = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&{param_area}={area_cod}"
             tareas.append((f"SIGED_{area_nom}_{tipo_nom}", url, {"Grupo": "SIGED", "Tipo": tipo_nom, "Área": area_nom}))
 
-    # Descargar en paralelo expedientes enviados Y recibidos/archivados dentro de UA (45)
+    # Descargar en paralelo expedientes enviados y recibidos de UA (45), igual que DRE, SDEM y SRT
     tareas.append(("UA_Enviado", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaEnviadoArea=45", {"Grupo": "UA", "Tipo": "Enviado", "Área": "UA"}))
-    tareas.append(("UA_Actual", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionArea=45", {"Grupo": "UA", "Tipo": "Actual", "Área": "UA"}))
+    tareas.append(("UA_Recibido", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaRecibidoArea=45", {"Grupo": "UA", "Tipo": "Recibido", "Área": "UA"}))
 
     lotes_siged, lotes_ua, errores = [], [], []
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -359,6 +359,28 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
 
     if not lotes_siged:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), errores
+
+    df = pd.concat(lotes_siged, ignore_index=True)
+    df = df[df["Número de registro"].notna()].copy()
+    df["Número de registro"] = df["Número de registro"].astype(str).str.strip().str.upper()
+    df = df[df["Número de registro"] != "NÚMERO DE REGISTRO"]
+    df = df.drop_duplicates(subset=["Número de registro"], keep="first").reset_index(drop=True)
+    clasif = df.apply(clasificar_tipo_gestion, axis=1)
+    df["COLUMNA AUXILIAR"] = "1"
+    df["TIPO_GESTION"] = [c[0] for c in clasif]
+    df["SUBTIPO_TÉCNICO"] = [c[1] for c in clasif]
+
+    # Conjunto completo de UA (Enviados + Recibidos) solo para búsqueda de expedientes en comentarios
+    df_ua = pd.DataFrame()
+    if lotes_ua:
+        df_ua = pd.concat(lotes_ua, ignore_index=True)
+        if "Número de registro" in df_ua.columns:
+            df_ua = df_ua[df_ua["Número de registro"].notna()].copy()
+            df_ua["Número de registro"] = df_ua["Número de registro"].astype(str).str.strip().str.upper()
+            df_ua = df_ua[df_ua["Número de registro"] != "NÚMERO DE REGISTRO"]
+            df_ua = df_ua.drop_duplicates(subset=["Número de registro"], keep="first").reset_index(drop=True)
+
+    return df, df_ua, pd.DataFrame(), errores
 
     df = pd.concat(lotes_siged, ignore_index=True)
     df = df[df["Número de registro"].notna()].copy()
@@ -851,16 +873,10 @@ else:
     filas_ocultas = []
     if "Observación" in df_siged.columns:
         mapa_ua = {}
-        candidatos_ua_os = []
         if not df_ua.empty and "Número de registro" in df_ua.columns:
             for _, rua in df_ua.iterrows():
                 d_ua = rua.to_dict()
-                reg_ua = str(d_ua.get("Número de registro", "")).strip().upper()
-                mapa_ua[reg_ua] = d_ua
-                asu_ua = str(d_ua.get("Asunto", "")).lower()
-                if reg_ua not in exps_usados and ("electronica" in asu_ua or "electrónica" in asu_ua) and ("solicitud de pago" in asu_ua or "orden de servicio" in asu_ua):
-                    fec_ua = pd.to_datetime(d_ua.get("Fecha de creación", None), dayfirst=True, errors="coerce")
-                    candidatos_ua_os.append((reg_ua, fec_ua, d_ua.get("Asunto", ""), d_ua.get("Ubicación Persona", "")))
+                mapa_ua[str(d_ua.get("Número de registro", "")).strip().upper()] = d_ua
 
         exps_ya_en_pend = set(df_pendientes["Número de registro"])
         for _, r_orig in df_siged.iterrows():
@@ -900,53 +916,11 @@ else:
                         asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
                         area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
                         pers_ua = info_ua.get("Ubicación Persona", "")
-
                         pers_gasto = ""
-                        sugerencia_fechas = ""
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                rg0 = m_g.iloc[0]
-                                pers_gasto = f" ({rg0.get('Persona', '')})"
-
-                                # Si no se encontró el expediente exacto/combinatorio, sugerir OS Electrónicas libres por fechas de GASTO
-                                if len(info_ua) == 0 and candidatos_ua_os:
-                                    fechas_ref = []
-                                    for col_f in ["Fech.Trámite", "Fech.Inicio", "Fech.Fin", "Fech.Venc."]:
-                                        val_f = rg0.get(col_f, None)
-                                        if isinstance(val_f, (int, float)) and val_f > 20000:
-                                            fechas_ref.append(pd.to_datetime(val_f, unit="D", origin="1899-12-30"))
-                                        elif val_f not in [None, ""]:
-                                            dt_f = pd.to_datetime(str(val_f).strip(), dayfirst=True, errors="coerce")
-                                            if pd.notna(dt_f):
-                                                fechas_ref.append(dt_f)
-
-                                    cands_fec = []
-                                    if fechas_ref:
-                                        f_base = max(fechas_ref)
-                                        f_min = min(fechas_ref) - pd.Timedelta(days=5)
-                                        f_max = f_base + pd.Timedelta(days=25)
-                                        for c_reg, c_fec, c_asu, c_pers in candidatos_ua_os:
-                                            if pd.notna(c_fec) and f_min.date() <= c_fec.date() <= f_max.date():
-                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:50]} [{c_pers}]")
-
-                                        # Si no hubo en -5/+25 días, tomar las 5 más cercanas en fecha
-                                        if not cands_fec:
-                                            ordenados = sorted(
-                                                [c for c in candidatos_ua_os if pd.notna(c)],
-                                                key=lambda x: abs((x.date() - f_base.date()).days)
-                                            )
-                                            for c_reg, c_fec, c_asu, c_pers in ordenados[:5]:
-                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:50]} [{c_pers}]")
-                                    else:
-                                        # Si la fila de GASTO no tiene fechas, mostrar las 5 más antiguas libres de UA
-                                        for c_reg, c_fec, c_asu, c_pers in candidatos_ua_os[:5]:
-                                            f_txt = c_fec.strftime('%d/%m') if pd.notna(c_fec) else "s/f"
-                                            cands_fec.append(f"• {c_reg} ({f_txt}): {c_asu[:50]} [{c_pers}]")
-
-                                    if cands_fec:
-                                        sugerencia_fechas = "\n🔎 Posibles OS Electrónicas por fecha:\n" + "\n".join(cands_fec[:6])
-
+                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
 
                         nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
                         filas_ocultas.append({
@@ -955,9 +929,8 @@ else:
                             "Asunto": asunto_ua,
                             "Ubicación Área": area_ua,
                             "Ubicación Persona": pers_ua,
-                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]}){sugerencia_fechas}"
+                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                         })
-
 
     def sugerir_imputacion(row):
         asunto = str(row.get("Asunto", ""))
