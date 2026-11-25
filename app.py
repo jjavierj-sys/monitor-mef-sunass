@@ -422,7 +422,7 @@ def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
         ws = wb.add_worksheet(title=nombre_hoja, rows=max(len(df) + 50, 500), cols=max(len(df.columns) + 2, 22))
     df_clean = df.fillna("").astype(str)
     ws.clear()
-    ws.update([df_clean.columns.tolist()] + df_clean.values.tolist())
+    ws.update([df_clean.columns.tolist()] + df_clean.values.tolist(), value_input_option="RAW")
 
 
 # =====================================================================
