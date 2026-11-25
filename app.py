@@ -43,6 +43,7 @@ st.markdown("""
     table td, table th {
         white-space: normal !important;
         word-wrap: break-word !important;
+        text-align: left !important;
         font-size: 0.82rem !important;
         vertical-align: middle !important;
         padding: 8px 8px !important;
@@ -1051,7 +1052,10 @@ else:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             st.button("🧹 Mostrar todos", on_click=limpiar_bandeja_gasto, use_container_width=True, key="btn_limp_g")
 
-        df_b = df_pend_gasto.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
+        df_b = df_pend_gasto.copy()
+        df_b["_orden_tg"] = pd.to_numeric(df_b["TIPO_GESTION"].astype(str).str.extract(r"^(\d+)")[0], errors="coerce").fillna(9999)
+        df_b = df_b.sort_values(by=["_orden_tg", "Número de registro"])
+
         if f_rubro != "Todos de GASTO":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
         df_b = aplicar_filtro_fecha(df_b, sel_fec_g)
@@ -1094,7 +1098,8 @@ else:
             df_d = df_d[df_d["TIPO_GESTION"] == f_tipo_otro]
         df_d = aplicar_filtro_fecha(df_d, sel_fec_o)
 
-        df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "TIPO_GESTION", "Número de registro"], ascending=[False, True, True])
+        df_d["_orden_tg"] = pd.to_numeric(df_d["TIPO_GESTION"].astype(str).str.extract(r"^(\d+)")[0], errors="coerce").fillna(9999)
+        df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "_orden_tg", "Número de registro"], ascending=[False, True, True])
 
         if df_d.empty:
             st.info("No ingresaron expedientes de estas categorías para los filtros seleccionados.")
