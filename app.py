@@ -145,16 +145,18 @@ def clasificar_subtipo_tecnico(txt):
     return ""
 
 def clasificar_tipo_gestion(row):
-    asunto_low = str(row.get("Asunto", "")).lower()
+    import unicodedata
+    txt_raw = str(row.get("Asunto", "")).lower()
+    asunto_low = "".join(c for c in unicodedata.normalize("NFD", txt_raw) if unicodedata.category(c) != "Mn")
 
-    # Prioridad documental previa (para no contaminar Gasto/Devengado)
-    if any(k in asunto_low for k in ["revision de tdr", "revisión de tdr", "revision del tdr", "revisión del tdr", "opinion tecnica de tdr", "opinión técnica de tdr"]):
+    # Reglas previas sin tildes (captura con o sin tilde automáticamente)
+    if any(k in asunto_low for k in ["revision de tdr", "revision del tdr", "opinion tecnica de tdr", "revision de terminos de referencia"]):
         return "07. REVISIÓN DE TDR"
-    if any(k in asunto_low for k in ["cuadro multianual", "cmn", "inclusion en el cmn", "inclusión en el cmn", "exclusion del cmn", "exclusión del cmn"]):
+    if any(k in asunto_low for k in ["cuadro multianual", "cmn", "inclusion en el cmn", "exclusion del cmn"]):
         return "09. CMN"
-    if any(k in asunto_low for k in ["modificacion presupuestal", "modificación presupuestal", "nota modificatoria", "notas modificatorias", "habilitacion presupuestal", "habilitación presupuestal"]):
+    if any(k in asunto_low for k in ["modificacion presupuestal", "nota modificatoria", "notas modificatorias", "habilitacion presupuestal"]):
         return "08. PRESUPUESTO / MODIFICACIONES"
-    if any(k in asunto_low for k in ["certificacion", "certificación", "ccp", "ampliacion de pasajes", "ampliación de pasajes", "ampliacion presupuestal", "ampliación presupuestal", "rebaja de certificacion", "rebaja de certificación", "rebaja de ccp"]):
+    if any(k in asunto_low for k in ["certificacion", "ccp", "ampliacion de pasajes", "ampliacion presupuestal", "rebaja de certificacion", "rebaja de ccp", "ampliacion de ccp"]):
         return "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA"
 
     areaH = str(row.get("Área remitente", "")).lower()
