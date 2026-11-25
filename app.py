@@ -376,27 +376,6 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
 
     df_siged = preparar_expedientes(lotes_siged)
 
-    exps_referenciados = set()
-    if not df_siged.empty and "Observación" in df_siged.columns:
-        for obs in df_siged["Observación"].dropna():
-            exps_referenciados.update(extraer_expedientes_en_texto(obs))
-    if exps_gasto:
-        exps_referenciados.update(exps_gasto)
-    exps_faltantes = exps_referenciados - (set(df_siged["Número de registro"]) if not df_siged.empty else set())
-
-    lotes_sunass = []
-    if exps_faltantes:
-        tareas_esp = [
-            (f"EXP_{exp}", f"{base_exp}?busquedaNumeroRegistro={exp}", {"Grupo": "SUNASS"})
-            for exp in list(exps_faltantes)[:50]
-        ]
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas_esp):
-                if not err and not df_res.empty:
-                    lotes_sunass.append(df_res.drop(columns=["Grupo"]))
-
-    df_sunass = preparar_expedientes(lotes_sunass)
-
     df_docs = pd.DataFrame()
     if lotes_docs:
         df_docs = pd.concat(lotes_docs, ignore_index=True)
@@ -404,7 +383,7 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
         df_docs = df_docs[df_docs[col_id].notna()].drop_duplicates(subset=[col_id]).reset_index(drop=True)
         df_docs["COLUMNA AUXILIAR"] = "1"
 
-    return df_siged, df_sunass, df_docs, errores
+    return df_siged, pd.DataFrame(), df_docs, errores
 
 def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
     if df is None or df.empty:
