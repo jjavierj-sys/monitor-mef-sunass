@@ -453,7 +453,7 @@ if modulo_activo == "💰 Presupuesto MEF":
             return "SDEM"
         return f"Meta {m}"
 
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=600)
     def leer_pestana_mef(nombre):
         wb = conectar_gsheets()
         regs = wb.worksheet(nombre).get_all_records(value_render_option='UNFORMATTED_VALUE')
@@ -789,7 +789,7 @@ if modulo_activo == "💰 Presupuesto MEF":
 # MÓDULO 2: SIGED & PROGRAMACIÓN DE GASTO (CRUCE INTELIGENTE)
 # =====================================================================
 else:
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=600)
     def leer_hoja_segura(nombre):
         wb = conectar_gsheets()
         try:
@@ -857,121 +857,145 @@ else:
                 st.success(f"¡Cargados {len(df_m_siged)} expedientes desde archivo!")
                 st.rerun()
 
-    df_siged = leer_hoja_segura("SIGED_Consolidado")
-    df_ua = leer_hoja_segura("UA_Vuelos")
-    df_sunass = pd.DataFrame()
-    df_gasto = df_gasto_pre
-    df_anulados = leer_hoja_segura("ANULADOS")
+    @st.cache_data(ttl=600)
+    def obtener_bandejas_siged_cacheadas():
+        df_siged_loc = leer_hoja_segura("SIGED_Consolidado")
+        df_ua_loc = leer_hoja_segura("UA_Vuelos")
+        df_gasto_loc = leer_hoja_segura("GASTO")
+        df_anulados_loc = leer_hoja_segura("ANULADOS")
 
-    if df_siged.empty:
-        st.info("Presiona **🔄 Sincronizar SIGED (API SUNASS)** o sube los `.xls` de SIGED para comenzar.")
-        st.stop()
+        if df_siged_loc.empty:
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    exps_usados = set(exps_gasto_set)
-    if not df_anulados.empty:
-        col_anul = df_anulados.columns[0]
-        vals_a = df_anulados[col_anul].dropna().astype(str).str.strip().str.upper()
-        exps_usados.update(v for v in vals_a if v.startswith("202"))
+        exps_g_set = set()
+        if not df_gasto_loc.empty:
+            for col in cols_exp_gasto:
+                if col in df_gasto_loc.columns:
+                    vals = df_gasto_loc[col].dropna().astype(str).str.strip().str.upper()
+                    exps_g_set.update(v for v in vals if v.startswith("202"))
 
-    df_siged["Número de registro"] = df_siged["Número de registro"].astype(str).str.strip().str.upper()
-    df_siged["TIPO_GESTION"] = df_siged["TIPO_GESTION"].fillna("").astype(str).str.strip()
-    df_siged.loc[df_siged["TIPO_GESTION"].isin(["", "0", "nan", "None"]), "TIPO_GESTION"] = "81. TÉCNICO RESIDUAL"
+        exps_usados_loc = set(exps_g_set)
+        if not df_anulados_loc.empty:
+            col_anul = df_anulados_loc.columns[0]
+            vals_a = df_anulados_loc[col_anul].dropna().astype(str).str.strip().str.upper()
+            exps_usados_loc.update(v for v in vals_a if v.startswith("202"))
 
-    df_pendientes = df_siged[~df_siged["Número de registro"].isin(exps_usados)].copy()
+        df_siged_loc["Número de registro"] = df_siged_loc["Número de registro"].astype(str).str.strip().str.upper()
+        df_siged_loc["TIPO_GESTION"] = df_siged_loc["TIPO_GESTION"].fillna("").astype(str).str.strip()
+        df_siged_loc.loc[df_siged_loc["TIPO_GESTION"].isin(["", "0", "nan", "None"]), "TIPO_GESTION"] = "81. TÉCNICO RESIDUAL"
 
-    # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
-    # Identificar qué Exp.Solicitud en GASTO aún NO tienen un Exp.Devengado asignado
-    solicitudes_sin_devengado = set()
-    if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns and "Exp.Devengado" in df_gasto.columns:
-        for _, rg in df_gasto.iterrows():
-            sol = str(rg.get("Exp.Solicitud", "")).strip().upper()
-            dev = str(rg.get("Exp.Devengado", "")).strip().upper()
-            if sol.startswith("202") and not dev.startswith("202"):
-                solicitudes_sin_devengado.add(sol)
+        df_pend_loc = df_siged_loc[~df_siged_loc["Número de registro"].isin(exps_usados_loc)].copy()
 
-    filas_ocultas = []
-    if "Observación" in df_siged.columns:
-        mapa_ua = {}
-        if not df_ua.empty and "Número de registro" in df_ua.columns:
-            for _, rua in df_ua.iterrows():
-                d_ua = rua.to_dict()
-                mapa_ua[str(d_ua.get("Número de registro", "")).strip().upper()] = d_ua
+        solicitudes_sin_dev = set()
+        if not df_gasto_loc.empty and "Exp.Solicitud" in df_gasto_loc.columns and "Exp.Devengado" in df_gasto_loc.columns:
+            for _, rg in df_gasto_loc.iterrows():
+                sol = str(rg.get("Exp.Solicitud", "")).strip().upper()
+                dev = str(rg.get("Exp.Devengado", "")).strip().upper()
+                if sol.startswith("202") and not dev.startswith("202"):
+                    solicitudes_sin_dev.add(sol)
 
-        exps_ya_en_pend = set(df_pendientes["Número de registro"])
-        for _, r_orig in df_siged.iterrows():
-            exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
-            obs = str(r_orig.get("Observación", ""))
-            # SOLO revisar observaciones de solicitudes que AÚN NO tienen Exp.Devengado en GASTO
-            if exp_orig in solicitudes_sin_devengado and obs:
-                for exp_citado in extraer_expedientes_en_texto(obs):
-                    if exp_citado == exp_orig:
-                        continue
+        filas_oc = []
+        if "Observación" in df_siged_loc.columns:
+            mapa_ua_loc = {}
+            if not df_ua_loc.empty and "Número de registro" in df_ua_loc.columns:
+                for _, rua in df_ua_loc.iterrows():
+                    d_ua = rua.to_dict()
+                    mapa_ua_loc[str(d_ua.get("Número de registro", "")).strip().upper()] = d_ua
 
-                    exp_resuelto = exp_citado
-                    info_ua = mapa_ua.get(exp_citado, {})
-                    if len(info_ua) == 0 and len(mapa_ua) > 0:
-                        partes = exp_citado.split("-")
-                        if len(partes) == 3:
-                            p_anio, p_tipo, num5 = partes
-                            if len(num5) == 5:
-                                candidatos = [f"{p_anio}-{p_tipo}-{num5}{d}" for d in range(10)]
-                                candidatos.append(f"{p_anio}-{p_tipo}-0{num5}")
-                                for cand in candidatos:
-                                    if cand in mapa_ua and cand not in exps_usados:
-                                        asunto_cand = str(mapa_ua[cand].get("Asunto", "")).lower()
-                                        if ("electronica" in asunto_cand or "electrónica" in asunto_cand) and ("solicitud de pago" in asunto_cand or "orden de servicio" in asunto_cand):
-                                            exp_resuelto = cand
-                                            info_ua = mapa_ua[cand]
-                                            break
+            exps_ya_pend = set(df_pend_loc["Número de registro"])
+            for _, r_orig in df_siged_loc.iterrows():
+                exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
+                obs = str(r_orig.get("Observación", ""))
+                if exp_orig in solicitudes_sin_dev and obs:
+                    for exp_citado in extraer_expedientes_en_texto(obs):
+                        if exp_citado == exp_orig:
+                            continue
+                        exp_resuelto = exp_citado
+                        info_ua = mapa_ua_loc.get(exp_citado, {})
+                        if len(info_ua) == 0 and len(mapa_ua_loc) > 0:
+                            partes = exp_citado.split("-")
+                            if len(partes) == 3:
+                                p_anio, p_tipo, num5 = partes
+                                if len(num5) == 5:
+                                    candidatos = [f"{p_anio}-{p_tipo}-{num5}{d}" for d in range(10)]
+                                    candidatos.append(f"{p_anio}-{p_tipo}-0{num5}")
+                                    for cand in candidatos:
+                                        if cand in mapa_ua_loc and cand not in exps_usados_loc:
+                                            asunto_cand = str(mapa_ua_loc[cand].get("Asunto", "")).lower()
+                                            if ("electronica" in asunto_cand or "electrónica" in asunto_cand) and ("solicitud de pago" in asunto_cand or "orden de servicio" in asunto_cand):
+                                                exp_resuelto = cand
+                                                info_ua = mapa_ua_loc[cand]
+                                                break
+                        if exp_resuelto not in exps_usados_loc and exp_resuelto not in exps_ya_pend:
+                            exps_ya_pend.add(exp_resuelto)
+                            asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
+                            area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
+                            pers_ua = info_ua.get("Ubicación Persona", "")
+                            pers_gasto = ""
+                            if not df_gasto_loc.empty and "Exp.Solicitud" in df_gasto_loc.columns:
+                                m_g = df_gasto_loc[df_gasto_loc["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
+                                if not m_g.empty:
+                                    pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+                            nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
+                            filas_oc.append({
+                                "Número de registro": exp_resuelto,
+                                "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
+                                "Asunto": asunto_ua,
+                                "Ubicación Área": area_ua,
+                                "Ubicación Persona": pers_ua,
+                                "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
+                            })
 
-                    if exp_resuelto not in exps_usados and exp_resuelto not in exps_ya_en_pend:
-                        exps_ya_en_pend.add(exp_resuelto)
-                        asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
-                        area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
-                        pers_ua = info_ua.get("Ubicación Persona", "")
-                        pers_gasto = ""
-                        if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
-                            m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
-                            if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+        def sugerir_imp_loc(row):
+            asunto = str(row.get("Asunto", ""))
+            tipo = str(row.get("TIPO_GESTION", ""))
+            if df_gasto_loc.empty:
+                return "Sin base GASTO"
+            m_siaf = re.search(r"siaf[^\d]{0,8}0*(\d{2,6})", asunto, re.IGNORECASE)
+            if m_siaf:
+                num_siaf = m_siaf.group(1)
+                if "SIAF" in df_gasto_loc.columns:
+                    match = df_gasto_loc[df_gasto_loc["SIAF"].astype(str).str.strip().str.lstrip("0") == num_siaf]
+                    if not match.empty:
+                        r0 = match.iloc[0]
+                        return f"🔗 SIAF {num_siaf} -> {r0.get('Persona', '')} | {r0.get('Genérica', '')} (Rend: {r0.get('Exp.Rendición', '')})"
+                return f"🔍 SIAF {num_siaf} detectado (no hallado en GASTO)"
+            if "ENTREGABLE" in tipo and "Persona" in df_gasto_loc.columns and "GASTO" in df_gasto_loc.columns:
+                por_dev = df_gasto_loc[df_gasto_loc["GASTO"].astype(str).str.upper() == "POR DEVENGAR"]
+                asunto_low = asunto.lower()
+                for _, rg in por_dev.iterrows():
+                    pers = str(rg.get("Persona", "")).strip()
+                    if len(pers) > 5:
+                        apellidos = [p.lower() for p in pers.split() if len(p) > 3]
+                        if sum(1 for a in apellidos if a in asunto_low) >= 2:
+                            return f"📄 Cuota pendiente -> {pers} ({rg.get('OS', '')} | Mes {rg.get('Mes.Devengue', '')})"
+            return "🆕 Nuevo registro para GASTO"
 
-                        nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
-                        filas_ocultas.append({
-                            "Número de registro": exp_resuelto,
-                            "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
-                            "Asunto": asunto_ua,
-                            "Ubicación Área": area_ua,
-                            "Ubicación Persona": pers_ua,
-                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
-                        })
+        def parsear_fec_loc(serie):
+            return serie.apply(
+                lambda x: pd.to_datetime(x, unit="D", origin="1899-12-30")
+                if isinstance(x, (int, float)) and x > 20000
+                else pd.to_datetime(str(x).strip(), dayfirst=True, errors="coerce")
+            )
 
-    def sugerir_imputacion(row):
-        asunto = str(row.get("Asunto", ""))
-        tipo = str(row.get("TIPO_GESTION", ""))
-        if df_gasto.empty:
-            return "Sin base GASTO"
+        df_pg = df_pend_loc[df_pend_loc["TIPO_GESTION"].isin(rubros_gasto)].copy()
+        if not df_pg.empty:
+            df_pg["Sugerencia_GASTO"] = df_pg.apply(sugerir_imp_loc, axis=1)
+        if filas_oc:
+            df_oc = pd.DataFrame(filas_oc)
+            if "Fecha de creación" not in df_oc.columns:
+                df_oc["Fecha de creación"] = pd.Timestamp.now(tz="America/Lima").strftime("%d/%m/%Y")
+            df_pg = pd.concat([df_oc, df_pg], ignore_index=True)
 
-        m_siaf = re.search(r"siaf[^\d]{0,8}0*(\d{2,6})", asunto, re.IGNORECASE)
-        if m_siaf:
-            num_siaf = m_siaf.group(1)
-            if "SIAF" in df_gasto.columns:
-                match = df_gasto[df_gasto["SIAF"].astype(str).str.strip().str.lstrip("0") == num_siaf]
-                if not match.empty:
-                    r0 = match.iloc[0]
-                    return f"🔗 SIAF {num_siaf} -> {r0.get('Persona', '')} | {r0.get('Genérica', '')} (Rend: {r0.get('Exp.Rendición', '')})"
-            return f"🔍 SIAF {num_siaf} detectado (no hallado en GASTO)"
+        if not df_pg.empty and "Fecha de creación" in df_pg.columns:
+            df_pg["Fecha_Creacion_DT"] = parsear_fec_loc(df_pg["Fecha de creación"])
+        else:
+            df_pg["Fecha_Creacion_DT"] = pd.NaT
 
-        if "ENTREGABLE" in tipo and "Persona" in df_gasto.columns and "GASTO" in df_gasto.columns:
-            por_dev = df_gasto[df_gasto["GASTO"].astype(str).str.upper() == "POR DEVENGAR"]
-            asunto_low = asunto.lower()
-            for _, rg in por_dev.iterrows():
-                pers = str(rg.get("Persona", "")).strip()
-                if len(pers) > 5:
-                    apellidos = [p.lower() for p in pers.split() if len(p) > 3]
-                    if sum(1 for a in apellidos if a in asunto_low) >= 2:
-                        return f"📄 Cuota pendiente -> {pers} ({rg.get('OS', '')} | Mes {rg.get('Mes.Devengue', '')})"
+        df_ot = df_siged_loc[~df_siged_loc["TIPO_GESTION"].isin(rubros_gasto)].copy()
+        df_ot["Fecha_Creacion_DT"] = parsear_fec_loc(df_ot["Fecha de creación"])
 
-        return "🆕 Nuevo registro para GASTO"
+        return df_siged_loc, df_gasto_loc, df_pend_loc, df_pg, df_ot
 
     rubros_gasto = [
         "01. PASAJES", "01. PASAJES (DEVENGUE UA)", "02. VIÁTICOS", "02. VIÁTICOS PAGADOS",
@@ -979,29 +1003,11 @@ else:
         "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
 
-    def parsear_fecha_siged(serie):
-        return serie.apply(
-            lambda x: pd.to_datetime(x, unit="D", origin="1899-12-30")
-            if isinstance(x, (int, float)) and x > 20000
-            else pd.to_datetime(str(x).strip(), dayfirst=True, errors="coerce")
-        )
+    df_siged, df_gasto, df_pendientes, df_pend_gasto, df_otros_siged = obtener_bandejas_siged_cacheadas()
+    if df_siged.empty:
+        st.info("Presiona **🔄 Sincronizar SIGED (API SUNASS)** o sube los `.xls` de SIGED para comenzar.")
+        st.stop()
 
-    df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
-    if not df_pend_gasto.empty:
-        df_pend_gasto["Sugerencia_GASTO"] = df_pend_gasto.apply(sugerir_imputacion, axis=1)
-    if filas_ocultas:
-        df_ocultos = pd.DataFrame(filas_ocultas)
-        if "Fecha de creación" not in df_ocultos.columns:
-            df_ocultos["Fecha de creación"] = pd.Timestamp.now(tz="America/Lima").strftime("%d/%m/%Y")
-        df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
-
-    if not df_pend_gasto.empty and "Fecha de creación" in df_pend_gasto.columns:
-        df_pend_gasto["Fecha_Creacion_DT"] = parsear_fecha_siged(df_pend_gasto["Fecha de creación"])
-    else:
-        df_pend_gasto["Fecha_Creacion_DT"] = pd.NaT
-
-    df_otros_siged = df_siged[~df_siged["TIPO_GESTION"].isin(rubros_gasto)].copy()
-    df_otros_siged["Fecha_Creacion_DT"] = parsear_fecha_siged(df_otros_siged["Fecha de creación"])
 
     s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
@@ -1150,17 +1156,20 @@ else:
             ].sum()
             st.dataframe(res_viat, use_container_width=True, hide_index=True)
 
-    buf_siged = io.BytesIO()
-    with pd.ExcelWriter(buf_siged, engine='openpyxl') as writer:
-        df_pend_gasto.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
-        df_otros_siged.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Otros_SIGED')
-        df_siged.to_excel(writer, index=False, sheet_name='SIGED_Completo')
-        if not df_gasto.empty:
-            df_gasto.to_excel(writer, index=False, sheet_name='GASTO')
+    @st.cache_data(ttl=600)
+    def generar_excel_siged_bytes(_df_pg, _df_ot, _df_sig, _df_gas):
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            _df_pg.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
+            _df_ot.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Otros_SIGED')
+            _df_sig.to_excel(writer, index=False, sheet_name='SIGED_Completo')
+            if not _df_gas.empty:
+                _df_gas.to_excel(writer, index=False, sheet_name='GASTO')
+        return buf.getvalue()
 
     st.download_button(
         label="📥 Descargar Reporte SIGED & Cruce (.xlsx)",
-        data=buf_siged.getvalue(),
+        data=generar_excel_siged_bytes(df_pend_gasto, df_otros_siged, df_siged, df_gasto),
         file_name=f"SUNASS_SIGED_Cruce_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
