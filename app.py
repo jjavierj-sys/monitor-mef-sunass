@@ -491,12 +491,6 @@ with tab_mod_mef:
 
         return df
 
-    col_ref, col_fec = st.columns([1, 2])
-    with col_ref:
-        if st.button("🔄 Actualizar", use_container_width=True, type="primary"):
-            st.cache_data.clear()
-            st.rerun()
-
     df_cons = leer_pestana_mef("MEF_Consolidado_Unico")
     df_mens = leer_pestana_mef("tblMensual")
 
@@ -507,7 +501,7 @@ with tab_mod_mef:
     fechas = sorted(df_cons['Fecha'].unique(), reverse=True)
 
     if "fecha_sel" not in st.session_state or st.session_state.fecha_sel not in fechas:
-        st.session_state.fecha_sel = fechas
+        st.session_state.fecha_sel = fechas[0]
     if "unidad_opt" not in st.session_state:
         st.session_state.unidad_opt = "DRE (Global)"
     if "fuente_opt" not in st.session_state:
@@ -516,23 +510,32 @@ with tab_mod_mef:
         st.session_state.gen_opt = "Todas"
 
     def limpiar_filtros():
-        st.session_state.fecha_sel = fechas
+        st.session_state.fecha_sel = fechas[0]
         st.session_state.unidad_opt = "DRE (Global)"
         st.session_state.fuente_opt = "Todas"
         st.session_state.gen_opt = "Todas"
 
-    with col_fec:
-        fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
+    zona_kpis_mef = st.container()
+    zona_filtros_mef = st.container()
 
-    f1, f2 = st.columns(2)
-    unidad_opt = f1.selectbox("Unidad Orgánica", ["DRE (Global)", "SRT", "SDEM"], key="unidad_opt")
-    fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], key="fuente_opt")
+    with zona_filtros_mef:
+        col_ref, col_fec = st.columns([1, 2])
+        with col_ref:
+            if st.button("🔄 Actualizar", use_container_width=True, type="primary"):
+                st.cache_data.clear()
+                st.rerun()
+        with col_fec:
+            fecha_sel = st.selectbox("Fecha de corte", fechas, key="fecha_sel", label_visibility="collapsed")
 
-    f3, f4 = st.columns([2, 1.2])
-    gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"], key="gen_opt")
-    with f4:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
+        f1, f2 = st.columns(2)
+        unidad_opt = f1.selectbox("Unidad Orgánica", ["DRE (Global)", "SRT", "SDEM"], key="unidad_opt")
+        fuente_opt = f2.selectbox("Fuente", ["Todas", "RO", "RDR"], key="fuente_opt")
+
+        f3, f4 = st.columns([2, 1.2])
+        gen_opt = f3.selectbox("Genérica", ["Todas", "2.1", "2.3", "2.3 (Sin practicantes)"], key="gen_opt")
+        with f4:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            st.button("🧹 Limpiar", on_click=limpiar_filtros, use_container_width=True)
 
     def filtrar_unidad(df):
         if unidad_opt == "SRT":
@@ -583,22 +586,24 @@ with tab_mod_mef:
         f"{emoji_estado} <b>{unidad_opt}</b> lleva el <b>{pct_tot:.1f}%</b> ejecutado de su meta."
     )
 
-    st.markdown(f"""
-    <div style="background-color: var(--secondary-background-color); border-radius: 16px; padding: 14px 16px; margin: 8px 0 14px 0; border: 1px solid rgba(128,128,128,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-        <div style="font-size: 0.92rem; margin-bottom: 8px;">{texto_estado}</div>
-        <div style="width: 100%; background-color: rgba(128,128,128,0.2); border-radius: 999px; height: 14px; overflow: hidden;">
-            <div style="width: {pct_bar}%; background: linear-gradient(90deg, #3B82F6, {color_estado}); height: 100%; border-radius: 999px;"></div>
+    with zona_kpis_mef:
+        st.markdown(f"""
+        <div style="background-color: var(--secondary-background-color); border-radius: 16px; padding: 14px 16px; margin: 4px 0 12px 0; border: 1px solid rgba(128,128,128,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+            <div style="font-size: 0.92rem; margin-bottom: 8px;">{texto_estado}</div>
+            <div style="width: 100%; background-color: rgba(128,128,128,0.2); border-radius: 999px; height: 14px; overflow: hidden;">
+                <div style="width: {pct_bar}%; background: linear-gradient(90deg, #3B82F6, {color_estado}); height: 100%; border-radius: 999px;"></div>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    k1, k2 = st.columns(2)
-    k1.metric(f"🎯 Meta (PIM {unidad_opt})", f"{pim_tot:,.2f}")
-    k2.metric("🚀 Ya Ejecutado", f"{dev_tot:,.2f}", f"{dif_dev:+,.2f} hoy" if abs(dif_dev) > 0 else "Sin cambio hoy")
+        k1, k2 = st.columns(2)
+        k1.metric(f"🎯 Meta (PIM {unidad_opt})", f"{pim_tot:,.2f}")
+        k2.metric("🚀 Ya Ejecutado", f"{dev_tot:,.2f}", f"{dif_dev:+,.2f} hoy" if abs(dif_dev) > 0 else "Sin cambio hoy")
 
-    k3, k4 = st.columns(2)
-    k3.metric("🏆 Avance Total", f"{pct_tot:.2f}%")
-    k4.metric("💰 Por Ejecutar", f"{saldo_tot:,.2f}")
+        k3, k4 = st.columns(2)
+        k3.metric("🏆 Avance Total", f"{pct_tot:.2f}%")
+        k4.metric("💰 Por Ejecutar", f"{saldo_tot:,.2f}")
+
 
     tab_resumen, tab_movs, tab_mes = st.tabs([
         "📌 Resumen",
