@@ -146,8 +146,8 @@ def clasificar_subtipo_tecnico(txt):
 
 def clasificar_tipo_gestion(row):
     import unicodedata
-    txt_raw = str(row.get("Asunto", "")).lower()
-    asunto_low = "".join(c for c in unicodedata.normalize("NFD", txt_raw) if unicodedata.category(c) != "Mn")
+    txt = str(row.get("Asunto", "")).lower()
+    asunto_low = "".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn")
 
     # Reglas previas sin tildes (captura con o sin tilde automáticamente)
     if any(k in asunto_low for k in ["revision de tdr", "revision del tdr", "opinion tecnica de tdr", "revision de terminos de referencia"]):
