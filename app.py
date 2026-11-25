@@ -1002,6 +1002,22 @@ else:
     s2.metric("🆕 Pendientes GASTO", f"{len(df_pend_gasto):,}", "Rubros 01 a 05 por imputar")
     s3.metric("📅 Otros / Presupuesto / Técnico", f"{len(df_otros_siged):,}", "Explorador por fecha")
 
+    def construir_opciones_fecha(df_base):
+        fechas_validas = df_base["Fecha_Creacion_DT"].dropna().sort_values(ascending=False)
+        if fechas_validas.empty:
+            return ["Todas las fechas"]
+        dias_unicos = list(dict.fromkeys(fechas_validas.dt.strftime("%d/%m/%Y")))
+        meses_unicos = list(dict.fromkeys("Mes: " + fechas_validas.dt.strftime("%m/%Y")))
+        return ["Todas las fechas"] + meses_unicos + dias_unicos
+
+    def aplicar_filtro_fecha(df_base, sel_fec):
+        if sel_fec == "Todas las fechas" or not sel_fec:
+            return df_base
+        if sel_fec.startswith("Mes: "):
+            mes_anio = sel_fec.replace("Mes: ", "").strip()
+            return df_base[df_base["Fecha_Creacion_DT"].dt.strftime("%m/%Y") == mes_anio]
+        return df_base[df_base["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y") == sel_fec]
+
     t_bandeja, t_diario, t_gestion, t_vuelos, t_viaticos = st.tabs([
         "🆕 Bandeja GASTO (SIGED2)",
         "📅 Explorador Diario (Todos los demás)",
@@ -1010,23 +1026,30 @@ else:
         "🧳 Viáticos y Rendiciones"
     ])
 
-    hoy_lima = pd.Timestamp.now(tz="America/Lima").date()
-
     with t_bandeja:
-        b1, b2, b3 = st.columns([1.4, 1.2, 1.4])
+        opciones_fec_g = construir_opciones_fecha(df_pend_gasto)
+        if "f_rubro_g" not in st.session_state:
+            st.session_state.f_rubro_g = "Todos de GASTO"
+        if "f_fec_g" not in st.session_state or st.session_state.f_fec_g not in opciones_fec_g:
+            st.session_state.f_fec_g = "Todas las fechas"
+
+        def limpiar_bandeja_gasto():
+            st.session_state.f_rubro_g = "Todos de GASTO"
+            st.session_state.f_fec_g = "Todas las fechas"
+
+        b1, b2, b3 = st.columns([1.6, 1.3, 1.1])
         with b1:
-            f_rubro = st.selectbox("Filtrar trámite de GASTO", ["Todos de GASTO"] + rubros_gasto)
+            f_rubro = st.selectbox("Concepto / Trámite", ["Todos de GASTO"] + rubros_gasto, key="f_rubro_g")
         with b2:
-            dia_gasto = st.date_input("Día de creación", value=hoy_lima, key="dia_gasto")
+            sel_fec_g = st.selectbox("Fecha de creación", opciones_fec_g, key="f_fec_g")
         with b3:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            sin_filtro_fec_gasto = st.checkbox("Quitar filtro de fecha", value=True, key="quitar_fec_gasto")
+            st.button("🧹 Mostrar todos", on_click=limpiar_bandeja_gasto, use_container_width=True, key="btn_limp_g")
 
         df_b = df_pend_gasto.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
         if f_rubro != "Todos de GASTO":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
-        if not sin_filtro_fec_gasto:
-            df_b = df_b[df_b["Fecha_Creacion_DT"].dt.date == dia_gasto]
+        df_b = aplicar_filtro_fecha(df_b, sel_fec_g)
 
         if df_b.empty:
             st.success("🎉 ¡Cero expedientes pendientes para los filtros seleccionados!")
@@ -1038,28 +1061,38 @@ else:
             st.table(df_b_show[cols_ver].set_index("Número de registro"))
 
     with t_diario:
-        f1, f2, f3 = st.columns([1.2, 1.4, 1.4])
+        tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
+        opciones_fec_o = construir_opciones_fecha(df_otros_siged)
+        # Por defecto arranca en la fecha más reciente con información
+        fec_default_o = opciones_fec_o[len([x for x in opciones_fec_o if x.startswith("Mes: ")]) + 1] if len(opciones_fec_o) > 2 else "Todas las fechas"
+
+        if "f_tipo_o" not in st.session_state or st.session_state.f_tipo_o not in tipos_disp:
+            st.session_state.f_tipo_o = "Todos los demás"
+        if "f_fec_o" not in st.session_state or st.session_state.f_fec_o not in opciones_fec_o:
+            st.session_state.f_fec_o = fec_default_o
+
+        def limpiar_explorador_otros():
+            st.session_state.f_tipo_o = "Todos los demás"
+            st.session_state.f_fec_o = "Todas las fechas"
+
+        f1, f2, f3 = st.columns([1.6, 1.3, 1.1])
         with f1:
-            dia_sel = st.date_input("Día de creación", value=hoy_lima, key="dia_otros")
+            f_tipo_otro = st.selectbox("Concepto / TIPO_GESTION", tipos_disp, key="f_tipo_o")
         with f2:
-            tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
-            f_tipo_otro = st.selectbox("Filtrar por TIPO_GESTION", tipos_disp)
+            sel_fec_o = st.selectbox("Fecha de creación", opciones_fec_o, key="f_fec_o")
         with f3:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            sin_filtro_fec_otros = st.checkbox("Quitar filtro de fecha", value=False, key="quitar_fec_otros")
+            st.button("🧹 Mostrar todos", on_click=limpiar_explorador_otros, use_container_width=True, key="btn_limp_o")
 
-        if sin_filtro_fec_otros:
-            df_d = df_otros_siged.copy()
-        else:
-            df_d = df_otros_siged[df_otros_siged["Fecha_Creacion_DT"].dt.date == dia_sel].copy()
-
+        df_d = df_otros_siged.copy()
         if f_tipo_otro != "Todos los demás":
             df_d = df_d[df_d["TIPO_GESTION"] == f_tipo_otro]
+        df_d = aplicar_filtro_fecha(df_d, sel_fec_o)
 
         df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "TIPO_GESTION", "Número de registro"], ascending=[False, True, True])
 
         if df_d.empty:
-            st.info(f"No ingresaron expedientes de estas categorías el {dia_sel.strftime('%d/%m/%Y')}.")
+            st.info("No ingresaron expedientes de estas categorías para los filtros seleccionados.")
         else:
             st.caption(f"Mostrando **{len(df_d)}** expedientes encontrados.")
             df_d_show = df_d.copy()
