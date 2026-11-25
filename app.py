@@ -761,17 +761,12 @@ else:
         if st.button("🔄 Sincronizar SIGED (API SUNASS)", type="primary", use_container_width=True):
             with st.spinner("Sincronizando expedientes SIGED (DRE, SDEM, SRT)..."):
                 anio_actual = datetime.now().year
-                df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
+                df_nuevo_siged, _, _, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
                 if not df_nuevo_siged.empty:
                     wb = conectar_gsheets()
                     guardar_dataframe_en_sheet(wb, "SIGED_Consolidado", df_nuevo_siged)
-                    guardar_dataframe_en_sheet(wb, "SUNASS_Global", df_nuevo_sunass)
-                    guardar_dataframe_en_sheet(wb, "Documentos_Emitidos", df_nuevo_docs)
                     st.cache_data.clear()
-                    st.success(
-                        f"¡Listo! SIGED: {len(df_nuevo_siged):,} | "
-                        f"SUNASS Global: {len(df_nuevo_sunass):,} | Docs: {len(df_nuevo_docs):,}"
-                    )
+                    st.success(f"¡Listo! {len(df_nuevo_siged):,} expedientes SIGED sincronizados.")
                     if errs:
                         st.caption("Avisos: " + " | ".join(errs))
                     st.rerun()
@@ -806,7 +801,7 @@ else:
                 st.rerun()
 
     df_siged = leer_hoja_segura("SIGED_Consolidado")
-    df_sunass = leer_hoja_segura("SUNASS_Global")
+    df_sunass = pd.DataFrame()
     df_gasto = df_gasto_pre
     df_anulados = leer_hoja_segura("ANULADOS")
 
@@ -826,11 +821,6 @@ else:
     # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
     filas_ocultas = []
     if "Observación" in df_siged.columns:
-        mapa_sunass = {}
-        if not df_sunass.empty and "Número de registro" in df_sunass.columns:
-            for _, rs in df_sunass.iterrows():
-                mapa_sunass[str(rs["Número de registro"]).strip().upper()] = rs
-
         exps_ya_en_pend = set(df_pendientes["Número de registro"])
         for _, r_orig in df_siged.iterrows():
             exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
@@ -839,22 +829,18 @@ else:
                 for exp_citado in extraer_expedientes_en_texto(obs):
                     if exp_citado != exp_orig and exp_citado not in exps_usados and exp_citado not in exps_ya_en_pend:
                         exps_ya_en_pend.add(exp_citado)
-                        info_s = mapa_sunass.get(exp_citado, {})
-                        asunto_s = info_s.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
-                        area_s = info_s.get("Ubicación Área", "UA / Tesorería")
-                        pers_s = info_s.get("Ubicación Persona", "")
                         pers_gasto = ""
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+                                pers_gasto = f" ({m_g.iloc.get('Persona', '')})"
 
                         filas_ocultas.append({
                             "Número de registro": exp_citado,
                             "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
-                            "Asunto": asunto_s,
-                            "Ubicación Área": area_s,
-                            "Ubicación Persona": pers_s,
+                            "Asunto": f"Expediente generado desde observación de {exp_orig}",
+                            "Ubicación Área": "UA / Tesorería",
+                            "Ubicación Persona": "",
                             "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                         })
 
