@@ -916,19 +916,37 @@ else:
                                         val_f = rg0.get(col_f, None)
                                         if isinstance(val_f, (int, float)) and val_f > 20000:
                                             fechas_ref.append(pd.to_datetime(val_f, unit="D", origin="1899-12-30"))
-                                        elif val_f:
-                                            dt_f = pd.to_datetime(val_f, dayfirst=True, errors="coerce")
+                                        elif val_f not in [None, ""]:
+                                            dt_f = pd.to_datetime(str(val_f).strip(), dayfirst=True, errors="coerce")
                                             if pd.notna(dt_f):
                                                 fechas_ref.append(dt_f)
+
+                                    cands_fec = []
                                     if fechas_ref:
-                                        f_min = min(fechas_ref) - pd.Timedelta(days=2)
-                                        f_max = max(fechas_ref) + pd.Timedelta(days=12)
-                                        cands_fec = []
+                                        f_base = max(fechas_ref)
+                                        f_min = min(fechas_ref) - pd.Timedelta(days=5)
+                                        f_max = f_base + pd.Timedelta(days=25)
                                         for c_reg, c_fec, c_asu, c_pers in candidatos_ua_os:
                                             if pd.notna(c_fec) and f_min.date() <= c_fec.date() <= f_max.date():
-                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:45]} [{c_pers}]")
-                                        if cands_fec:
-                                            sugerencia_fechas = "\n🔎 Posibles OS Electrónicas por fecha:\n" + "\n".join(cands_fec[:5])
+                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:50]} [{c_pers}]")
+
+                                        # Si no hubo en -5/+25 días, tomar las 5 más cercanas en fecha
+                                        if not cands_fec:
+                                            ordenados = sorted(
+                                                [c for c in candidatos_ua_os if pd.notna(c)],
+                                                key=lambda x: abs((x.date() - f_base.date()).days)
+                                            )
+                                            for c_reg, c_fec, c_asu, c_pers in ordenados[:5]:
+                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:50]} [{c_pers}]")
+                                    else:
+                                        # Si la fila de GASTO no tiene fechas, mostrar las 5 más antiguas libres de UA
+                                        for c_reg, c_fec, c_asu, c_pers in candidatos_ua_os[:5]:
+                                            f_txt = c_fec.strftime('%d/%m') if pd.notna(c_fec) else "s/f"
+                                            cands_fec.append(f"• {c_reg} ({f_txt}): {c_asu[:50]} [{c_pers}]")
+
+                                    if cands_fec:
+                                        sugerencia_fechas = "\n🔎 Posibles OS Electrónicas por fecha:\n" + "\n".join(cands_fec[:6])
+
 
                         nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
                         filas_ocultas.append({
