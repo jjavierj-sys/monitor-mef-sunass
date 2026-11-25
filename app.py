@@ -983,9 +983,9 @@ else:
     ]
     rubros_presupuesto = [
         "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA",
-        "06. CMN",
         "07. REVISIÓN DE TDR",
-        "08. PRESUPUESTO"
+        "08. PRESUPUESTO / MODIFICACIONES",
+        "09. CMN"
     ]
 
     df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
