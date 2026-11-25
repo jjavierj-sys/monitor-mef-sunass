@@ -972,6 +972,14 @@ else:
         "03. RENDICIONES", "03. RENDICIONES PAGADAS",
         "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
+
+    df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
+    if not df_pend_gasto.empty:
+        df_pend_gasto["Sugerencia_GASTO"] = df_pend_gasto.apply(sugerir_imputacion, axis=1)
+    if filas_ocultas:
+        df_ocultos = pd.DataFrame(filas_ocultas)
+        df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
+
     df_otros_siged = df_siged[~df_siged["TIPO_GESTION"].isin(rubros_gasto)].copy()
     df_otros_siged["Fecha_Creacion_DT"] = pd.to_datetime(df_otros_siged["Fecha de creación"], dayfirst=True, errors="coerce")
 
