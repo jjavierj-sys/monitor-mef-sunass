@@ -891,25 +891,18 @@ else:
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
-                        if len(partes) == 3 and len(partes[2]) == 5:
-                            p_anio, p_tipo, num5 = partes[0], partes[1], partes[2]
-                            candidatos = [f"{p_anio}-{p_tipo}-0{num5}"]
-                            for pos in range(1, 6):
-                                for d in range(10):
-                                    cand_num = num5[:pos] + str(d) + num5[pos:]
-                                    candidatos.append(f"{p_anio}-{p_tipo}-{cand_num}")
-
-                            fec_orig = pd.to_datetime(r_orig.get("Fecha de creación", None), dayfirst=True, errors="coerce")
-                            for cand in dict.fromkeys(candidatos):
-                                if cand in mapa_ua and cand not in exps_usados:
-                                    asunto_cand = str(mapa_ua[cand].get("Asunto", "")).lower()
-                                    if ("electronica" in asunto_cand or "electrónica" in asunto_cand) and ("solicitud de pago" in asunto_cand or "orden de servicio" in asunto_cand):
-                                        fec_cand = pd.to_datetime(mapa_ua[cand].get("Fecha de creación", None), dayfirst=True, errors="coerce")
-                                        if pd.notna(fec_orig) and pd.notna(fec_cand) and fec_cand.date() < fec_orig.date():
-                                            continue
-                                        exp_resuelto = cand
-                                        info_ua = mapa_ua[cand]
-                                        break
+                        if len(partes) == 3:
+                            p_anio, p_tipo, num5 = partes
+                            if len(num5) == 5:
+                                candidatos = [f"{p_anio}-{p_tipo}-{num5}{d}" for d in range(10)]
+                                candidatos.append(f"{p_anio}-{p_tipo}-0{num5}")
+                                for cand in candidatos:
+                                    if cand in mapa_ua and cand not in exps_usados:
+                                        asunto_cand = str(mapa_ua[cand].get("Asunto", "")).lower()
+                                        if ("electronica" in asunto_cand or "electrónica" in asunto_cand) and ("solicitud de pago" in asunto_cand or "orden de servicio" in asunto_cand):
+                                            exp_resuelto = cand
+                                            info_ua = mapa_ua[cand]
+                                            break
 
                     if exp_resuelto not in exps_usados and exp_resuelto not in exps_ya_en_pend:
                         exps_ya_en_pend.add(exp_resuelto)
