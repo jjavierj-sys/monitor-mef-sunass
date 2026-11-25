@@ -853,7 +853,7 @@ else:
         mapa_ua = {}
         if not df_ua.empty and "Número de registro" in df_ua.columns:
             for _, rua in df_ua.iterrows():
-                mapa_ua[str(rua["Número de registro"]).strip().upper()] = rua
+                mapa_ua[str(rua["Número de registro"]).strip().upper()] = rua.to_dict()
 
         exps_ya_en_pend = set(df_pendientes["Número de registro"])
         for _, r_orig in df_siged.iterrows():
@@ -867,7 +867,7 @@ else:
                     # 1. Búsqueda exacta y variantes flexibles si tiene 5 dígitos (ej. 2026-I01-01314 -> 001314 o 013140)
                     exp_resuelto = exp_citado
                     info_ua = mapa_ua.get(exp_citado, {})
-                    if not info_ua and mapa_ua:
+                    if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
                         if len(partes) == 3 and len(partes) == 5:
                             cand_izq = f"{partes}-{partes}-0{partes}"
