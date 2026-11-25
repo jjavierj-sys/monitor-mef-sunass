@@ -1146,7 +1146,7 @@ with tab_mod_siged:
             df_b_show = df_b.copy()
             df_b_show["TIPO_GESTION"] = df_b_show["TIPO_GESTION"].astype(str).str.replace(r"^(\d+)\.\s*", r"\1 | ", regex=True)
             df_b_show["Fecha de creación"] = df_b_show["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y").fillna("")
-            cols_ver = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
+            cols_ver = ["Número de registro", "Fecha de creación", "Área", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
             cols_ver = [c for c in cols_ver if c in df_b_show.columns]
             st.table(df_b_show[cols_ver].set_index("Número de registro"))
 
@@ -1194,7 +1194,7 @@ with tab_mod_siged:
             df_d_show = df_d.copy()
             df_d_show["TIPO_GESTION"] = df_d_show["TIPO_GESTION"].astype(str).str.replace(r"^(\d+)\.\s*", r"\1 | ", regex=True)
             df_d_show["Fecha de creación"] = df_d_show["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y").fillna("")
-            cols_ver_d = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona"]
+            cols_ver_d = ["Número de registro", "Fecha de creación", "Área", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona"]
             cols_ver_d = [c for c in cols_ver_d if c in df_d_show.columns]
             st.table(df_d_show[cols_ver_d].set_index("Número de registro"))
 
