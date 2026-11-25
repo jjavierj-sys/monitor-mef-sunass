@@ -422,7 +422,7 @@ def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
         ws = wb.add_worksheet(title=nombre_hoja, rows=max(len(df) + 50, 500), cols=max(len(df.columns) + 2, 22))
     df_clean = df.fillna("").astype(str)
     ws.clear()
-    ws.update([df_clean.columns.tolist()] + df_clean.values.tolist(), value_input_option="RAW")
+    ws.update([df_clean.columns.tolist()] + df_clean.values.tolist())
 
 
 # =====================================================================
@@ -808,9 +808,9 @@ else:
     c_api, c_up = st.columns([1.3, 1.7])
     with c_api:
         if st.button("🔄 Sincronizar SIGED (API SUNASS)", type="primary", use_container_width=True):
-            with st.spinner("Sincronizando SIGED, SUNASS Global (filtrado) y Documentos..."):
+            with st.spinner("Sincronizando SIGED, SUNASS Global (4 trimestres) y Documentos..."):
                 anio_actual = datetime.now().year
-                df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
+                df_nuevo_siged, df_nuevo_sunass, df_nuevo_docs, errs = descargar_siged_completo_desde_api(anio_actual)
                 if not df_nuevo_siged.empty:
                     wb = conectar_gsheets()
                     guardar_dataframe_en_sheet(wb, "SIGED_Consolidado", df_nuevo_siged)
@@ -818,8 +818,8 @@ else:
                     guardar_dataframe_en_sheet(wb, "Documentos_Emitidos", df_nuevo_docs)
                     st.cache_data.clear()
                     st.success(
-                        f"¡Listo! SIGED: {len(df_nuevo_siged):,} | "
-                        f"SUNASS Rastreo: {len(df_nuevo_sunass):,} | Docs: {len(df_nuevo_docs):,}"
+                        f"¡Sincronizado! SIGED: {len(df_nuevo_siged):,} | "
+                        f"SUNASS Global: {len(df_nuevo_sunass):,} | Docs: {len(df_nuevo_docs):,}"
                     )
                     if errs:
                         st.caption("Avisos: " + " | ".join(errs))
@@ -951,7 +951,7 @@ else:
     if filas_ocultas:
         df_ocultos = pd.DataFrame(filas_ocultas)
         df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)
-  
+        
     
     s1, s2 = st.columns(2)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
