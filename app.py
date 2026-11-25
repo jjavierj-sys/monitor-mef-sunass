@@ -981,7 +981,11 @@ else:
         df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
 
     df_otros_siged = df_siged[~df_siged["TIPO_GESTION"].isin(rubros_gasto)].copy()
-    df_otros_siged["Fecha_Creacion_DT"] = pd.to_datetime(df_otros_siged["Fecha de creación"], dayfirst=True, errors="coerce")
+    df_otros_siged["Fecha_Creacion_DT"] = df_otros_siged["Fecha de creación"].apply(
+        lambda x: pd.to_datetime(x, unit="D", origin="1899-12-30")
+        if isinstance(x, (int, float)) and x > 20000
+        else pd.to_datetime(str(x).strip(), dayfirst=True, errors="coerce")
+    )
 
     s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
@@ -1010,39 +1014,21 @@ else:
             st.table(df_b[cols_ver].set_index("Número de registro"))
 
     with t_diario:
+        hoy_lima = pd.Timestamp.now(tz="America/Lima").date()
         f1, f2, f3 = st.columns([1.2, 1.3, 1.5])
         with f1:
-            modo_fecha = st.selectbox("Ventana de fecha", ["Hoy", "Ayer", "Últimos 7 días", "Rango personalizado", "Todo el año"])
-        hoy_lima = pd.Timestamp.now().normalize()
+            dia_sel = st.date_input("Día de creación", value=hoy_lima)
         with f2:
-            if modo_fecha == "Hoy":
-                f_ini, f_fin = hoy_lima, hoy_lima
-                st.caption(f"Mostrando: {hoy_lima.strftime('%d/%m/%Y')}")
-            elif modo_fecha == "Ayer":
-                ayer_lima = hoy_lima - pd.Timedelta(days=1)
-                f_ini, f_fin = ayer_lima, ayer_lima
-                st.caption(f"Mostrando: {ayer_lima.strftime('%d/%m/%Y')}")
-            elif modo_fecha == "Últimos 7 días":
-                f_ini, f_fin = hoy_lima - pd.Timedelta(days=7), hoy_lima
-                st.caption(f"Del {f_ini.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')}")
-            elif modo_fecha == "Rango personalizado":
-                rango = st.date_input("Selecciona fechas", [hoy_lima - pd.Timedelta(days=3), hoy_lima])
-                if len(rango) == 2:
-                    f_ini, f_fin = pd.Timestamp(rango[0]), pd.Timestamp(rango[1])
-                else:
-                    f_ini = f_fin = pd.Timestamp(rango[0])
-            else:
-                f_ini, f_fin = pd.Timestamp("2020-01-01"), pd.Timestamp("2099-12-31")
-                st.caption("Mostrando todo el año")
-
-        with f3:
             tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
             f_tipo_otro = st.selectbox("Filtrar por TIPO_GESTION", tipos_disp)
+        with f3:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            ver_todo_anio = st.checkbox("Mostrar todo el año (sin filtro de día)", value=False)
 
-        df_d = df_otros_siged[
-            (df_otros_siged["Fecha_Creacion_DT"].dt.normalize() >= f_ini) &
-            (df_otros_siged["Fecha_Creacion_DT"].dt.normalize() <= f_fin)
-        ].copy()
+        if ver_todo_anio:
+            df_d = df_otros_siged.copy()
+        else:
+            df_d = df_otros_siged[df_otros_siged["Fecha_Creacion_DT"].dt.date == dia_sel].copy()
 
         if f_tipo_otro != "Todos los demás":
             df_d = df_d[df_d["TIPO_GESTION"] == f_tipo_otro]
@@ -1050,12 +1036,14 @@ else:
         df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "TIPO_GESTION", "Número de registro"], ascending=[False, True, True])
 
         if df_d.empty:
-            st.info("No ingresaron expedientes de estas categorías en la fecha seleccionada.")
+            st.info(f"No ingresaron expedientes de estas categorías el {dia_sel.strftime('%d/%m/%Y')}.")
         else:
             st.caption(f"Mostrando **{len(df_d)}** expedientes encontrados.")
+            df_d_show = df_d.copy()
+            df_d_show["Fecha de creación"] = df_d_show["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y").fillna("")
             cols_ver_d = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona"]
-            cols_ver_d = [c for c in cols_ver_d if c in df_d.columns]
-            st.table(df_d[cols_ver_d].set_index("Número de registro"))
+            cols_ver_d = [c for c in cols_ver_d if c in df_d_show.columns]
+            st.table(df_d_show[cols_ver_d].set_index("Número de registro"))
 
     with t_gestion:
         res_tg = df_siged.groupby("TIPO_GESTION", as_index=False).agg(
