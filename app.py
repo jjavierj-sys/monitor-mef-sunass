@@ -954,6 +954,7 @@ with tab_mod_siged:
                             nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
                             filas_oc.append({
                                 "Número de registro": exp_resuelto,
+                                "Fecha de creación": info_ua.get("Fecha de creación", r_orig.get("Fecha de creación", "")),
                                 "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
                                 "Asunto": asunto_ua,
                                 "Ubicación Área": area_ua,
@@ -962,6 +963,7 @@ with tab_mod_siged:
                                 "Tipo": info_ua.get("Tipo", "Enviado"),
                                 "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                             })
+
 
         def sugerir_imp_loc(row):
             asunto = str(row.get("Asunto", ""))
@@ -1034,11 +1036,12 @@ with tab_mod_siged:
     total_hoy = n_hoy_gasto + n_hoy_otros
 
     if total_hoy > 0:
-        msg_hoy = f"<b>{total_hoy} expedientes</b> generados hoy ({hoy_str}) para revisión o seguimiento."
+        msg_hoy = f"<b>{total_hoy} expedientes</b> generados hoy ({hoy_str}: {n_hoy_gasto} en Gasto y {n_hoy_otros} en Explorador Diario)."
     else:
         ult_f = fec_otras_validas.max().strftime("%d/%m/%Y") if not fec_otras_validas.empty else "sin fecha"
         n_ult = int((fec_otras_validas.dt.strftime("%d/%m/%Y") == ult_f).sum()) if not fec_otras_validas.empty else 0
         msg_hoy = f"Hoy aún sin ingresos nuevos; último corte (<b>{ult_f}</b>) tuvo <b>{n_ult} expedientes</b>."
+
 
     color_b_sig = "#F59E0B" if len(df_pend_gasto) > 0 else "#10B981"
     icono_b_sig = "📋" if len(df_pend_gasto) > 0 else "🌟"
