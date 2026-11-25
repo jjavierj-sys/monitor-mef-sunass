@@ -1077,7 +1077,8 @@ else:
 
     buf_siged = io.BytesIO()
     with pd.ExcelWriter(buf_siged, engine='openpyxl') as writer:
-        df_pend_interes.to_excel(writer, index=False, sheet_name='Pendientes_SIGED2')
+        df_pend_gasto.to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
+        df_pend_presup.to_excel(writer, index=False, sheet_name='Pendientes_PRESUPUESTO')
         df_siged.to_excel(writer, index=False, sheet_name='SIGED_Completo')
         if not df_gasto.empty:
             df_gasto.to_excel(writer, index=False, sheet_name='GASTO')
