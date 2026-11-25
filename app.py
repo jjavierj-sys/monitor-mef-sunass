@@ -342,7 +342,7 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
 
     # Descargar en paralelo expedientes enviados Y recibidos/archivados dentro de UA (45)
     tareas.append(("UA_Enviado", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaEnviadoArea=45", {"Grupo": "UA", "Tipo": "Enviado", "Área": "UA"}))
-    tareas.append(("UA_Recibido", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaRecibidoArea=45", {"Grupo": "UA", "Tipo": "Recibido", "Área": "UA"}))
+    tareas.append(("UA_Actual", f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionArea=45", {"Grupo": "UA", "Tipo": "Actual", "Área": "UA"}))
 
     lotes_siged, lotes_ua, errores = [], [], []
     with ThreadPoolExecutor(max_workers=8) as executor:
