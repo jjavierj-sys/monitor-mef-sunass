@@ -340,14 +340,22 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             url = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&{param_area}={area_cod}"
             tareas.append((f"SIGED_{area_nom}_{tipo_nom}", url, {"Grupo": "SIGED", "Tipo": tipo_nom, "Área": area_nom}))
 
-    lotes_siged, errores = [], []
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    # Descargar en paralelo expedientes enviados por Unidad de Abastecimiento (UA = 45)
+    url_ua = f"{base_exp}?busquedaFechaDesde=01/01/{anio}&busquedaFechaHasta=31/12/{anio}&ubicacionHistoricaEnviadoArea=45"
+    tareas.append(("UA_Enviado", url_ua, {"Grupo": "UA", "Tipo": "Enviado", "Área": "UA"}))
+
+    lotes_siged, lotes_ua, errores = [], [], []
+    with ThreadPoolExecutor(max_workers=7) as executor:
         for etiqueta, df_res, err in executor.map(descargar_url_siged, tareas):
             if err:
                 errores.append(err)
             elif not df_res.empty:
+                grp = df_res["Grupo"].iloc[0]
                 df_res = df_res.drop(columns=["Grupo"])
-                lotes_siged.append(df_res)
+                if grp == "SIGED":
+                    lotes_siged.append(df_res)
+                elif grp == "UA":
+                    lotes_ua.append(df_res)
 
     if not lotes_siged:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), errores
@@ -359,10 +367,29 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
     df = df.drop_duplicates(subset=["Número de registro"], keep="first").reset_index(drop=True)
     clasif = df.apply(clasificar_tipo_gestion, axis=1)
     df["COLUMNA AUXILIAR"] = "1"
-    df["TIPO_GESTION"] = [c for c in clasif]
-    df["SUBTIPO_TÉCNICO"] = [c for c in clasif]
+    df["TIPO_GESTION"] = [c[0] for c in clasif]
+    df["SUBTIPO_TÉCNICO"] = [c[1] for c in clasif]
 
-    return df, pd.DataFrame(), pd.DataFrame(), errores
+    # Preparar base ligera de UA (filtrada solo a expedientes citados en Observaciones o relacionados a pasajes)
+    df_ua = pd.DataFrame()
+    if lotes_ua:
+        df_ua_raw = pd.concat(lotes_ua, ignore_index=True)
+        if "Número de registro" in df_ua_raw.columns:
+            df_ua_raw = df_ua_raw[df_ua_raw["Número de registro"].notna()].copy()
+            df_ua_raw["Número de registro"] = df_ua_raw["Número de registro"].astype(str).str.strip().str.upper()
+            df_ua_raw = df_ua_raw.drop_duplicates(subset=["Número de registro"], keep="first")
+
+            exps_citados = set()
+            if "Observación" in df.columns:
+                for obs in df["Observación"].dropna():
+                    exps_citados.update(extraer_expedientes_en_texto(obs))
+            if exps_gasto:
+                exps_citados.update(exps_gasto)
+
+            mask_pasaje = df_ua_raw["Asunto"].astype(str).str.lower().str.contains("pasaje|boleto|aereo|aéreo", na=False)
+            df_ua = df_ua_raw[df_ua_raw["Número de registro"].isin(exps_citados) | mask_pasaje].reset_index(drop=True)
+
+    return df, df_ua, pd.DataFrame(), errores
 
 def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
     if df is None or df.empty:
@@ -759,14 +786,15 @@ else:
     c_api, c_up = st.columns([1.3, 1.7])
     with c_api:
         if st.button("🔄 Sincronizar SIGED (API SUNASS)", type="primary", use_container_width=True):
-            with st.spinner("Sincronizando expedientes SIGED (DRE, SDEM, SRT)..."):
+            with st.spinner("Sincronizando expedientes SIGED (DRE, SDEM, SRT y rastreo UA)..."):
                 anio_actual = datetime.now().year
-                df_nuevo_siged, _, _, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
+                df_nuevo_siged, df_nuevo_ua, _, errs = descargar_siged_completo_desde_api(anio_actual, exps_gasto_set)
                 if not df_nuevo_siged.empty:
                     wb = conectar_gsheets()
                     guardar_dataframe_en_sheet(wb, "SIGED_Consolidado", df_nuevo_siged)
+                    guardar_dataframe_en_sheet(wb, "UA_Vuelos", df_nuevo_ua)
                     st.cache_data.clear()
-                    st.success(f"¡Listo! {len(df_nuevo_siged):,} expedientes SIGED sincronizados.")
+                    st.success(f"¡Listo! {len(df_nuevo_siged):,} expedientes SIGED y {len(df_nuevo_ua):,} rastreos UA sincronizados.")
                     if errs:
                         st.caption("Avisos: " + " | ".join(errs))
                     st.rerun()
@@ -801,6 +829,7 @@ else:
                 st.rerun()
 
     df_siged = leer_hoja_segura("SIGED_Consolidado")
+    df_ua = leer_hoja_segura("UA_Vuelos")
     df_sunass = pd.DataFrame()
     df_gasto = df_gasto_pre
     df_anulados = leer_hoja_segura("ANULADOS")
@@ -821,6 +850,11 @@ else:
     # Detección de expedientes ocultos de devengue en Observaciones (ej. Vuelos / Pasajes)
     filas_ocultas = []
     if "Observación" in df_siged.columns:
+        mapa_ua = {}
+        if not df_ua.empty and "Número de registro" in df_ua.columns:
+            for _, rua in df_ua.iterrows():
+                mapa_ua[str(rua["Número de registro"]).strip().upper()] = rua
+
         exps_ya_en_pend = set(df_pendientes["Número de registro"])
         for _, r_orig in df_siged.iterrows():
             exp_orig = str(r_orig.get("Número de registro", "")).strip().upper()
@@ -829,6 +863,10 @@ else:
                 for exp_citado in extraer_expedientes_en_texto(obs):
                     if exp_citado != exp_orig and exp_citado not in exps_usados and exp_citado not in exps_ya_en_pend:
                         exps_ya_en_pend.add(exp_citado)
+                        info_ua = mapa_ua.get(exp_citado, {})
+                        asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
+                        area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
+                        pers_ua = info_ua.get("Ubicación Persona", "")
                         pers_gasto = ""
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
@@ -838,9 +876,9 @@ else:
                         filas_ocultas.append({
                             "Número de registro": exp_citado,
                             "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
-                            "Asunto": f"Expediente generado desde observación de {exp_orig}",
-                            "Ubicación Área": "UA / Tesorería",
-                            "Ubicación Persona": "",
+                            "Asunto": asunto_ua,
+                            "Ubicación Área": area_ua,
+                            "Ubicación Persona": pers_ua,
                             "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                         })
 
