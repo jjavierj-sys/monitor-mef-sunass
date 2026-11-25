@@ -386,7 +386,7 @@ def descargar_siged_completo_desde_api(anio, exps_gasto=None):
             if exps_gasto:
                 exps_citados.update(exps_gasto)
 
-            mask_pasaje = df_ua_raw["Asunto"].astype(str).str.lower().str.contains("pasaje|boleto|aereo|aéreo", na=False)
+            mask_pasaje = df_ua_raw["Asunto"].astype(str).str.lower().str.contains("pasaje|boleto|aereo|aéreo|solicitud de pago", na=False)
             df_ua = df_ua_raw[df_ua_raw["Número de registro"].isin(exps_citados) | mask_pasaje].reset_index(drop=True)
 
     return df, df_ua, pd.DataFrame(), errores
@@ -861,9 +861,26 @@ else:
             obs = str(r_orig.get("Observación", ""))
             if exp_orig in exps_gasto_set and obs:
                 for exp_citado in extraer_expedientes_en_texto(obs):
-                    if exp_citado != exp_orig and exp_citado not in exps_usados and exp_citado not in exps_ya_en_pend:
-                        exps_ya_en_pend.add(exp_citado)
-                        info_ua = mapa_ua.get(exp_citado, {})
+                    if exp_citado == exp_orig:
+                        continue
+
+                    # 1. Búsqueda exacta y variantes flexibles si tiene 5 dígitos (ej. 2026-I01-01314 -> 001314 o 013140)
+                    exp_resuelto = exp_citado
+                    info_ua = mapa_ua.get(exp_citado, {})
+                    if not info_ua and mapa_ua:
+                        partes = exp_citado.split("-")
+                        if len(partes) == 3 and len(partes) == 5:
+                            cand_izq = f"{partes}-{partes}-0{partes}"
+                            cand_der = f"{partes}-{partes}-{partes}0"
+                            if cand_izq in mapa_ua:
+                                exp_resuelto = cand_izq
+                                info_ua = mapa_ua[cand_izq]
+                            elif cand_der in mapa_ua:
+                                exp_resuelto = cand_der
+                                info_ua = mapa_ua[cand_der]
+
+                    if exp_resuelto not in exps_usados and exp_resuelto not in exps_ya_en_pend:
+                        exps_ya_en_pend.add(exp_resuelto)
                         asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
                         area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
                         pers_ua = info_ua.get("Ubicación Persona", "")
@@ -871,15 +888,16 @@ else:
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+                                pers_gasto = f" ({m_g.iloc.get('Persona', '')})"
 
+                        nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
                         filas_ocultas.append({
-                            "Número de registro": exp_citado,
+                            "Número de registro": exp_resuelto,
                             "TIPO_GESTION": "01. PASAJES (DEVENGUE UA)",
                             "Asunto": asunto_ua,
                             "Ubicación Área": area_ua,
                             "Ubicación Persona": pers_ua,
-                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
+                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                         })
 
     def sugerir_imputacion(row):
