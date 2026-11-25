@@ -18,7 +18,7 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 960px; }
+    .block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 1100px; }
 
     div[data-testid="stMetric"] {
         background-color: var(--secondary-background-color);
@@ -34,6 +34,7 @@ st.markdown("""
     }
 
     table {
+        width: 100% !important;
         border-collapse: separate !important;
         border-spacing: 0 !important;
         border-radius: 12px !important;
@@ -42,35 +43,9 @@ st.markdown("""
     table td, table th {
         white-space: normal !important;
         word-wrap: break-word !important;
-        font-size: 0.83rem !important;
+        font-size: 0.82rem !important;
         vertical-align: middle !important;
         padding: 8px 8px !important;
-    }
-
-    div[data-testid="stTable"] table {
-        table-layout: auto !important;
-        width: 100% !important;
-    }
-    div[data-testid="stTable"] th:nth-child(1),
-    div[data-testid="stTable"] td:nth-child(1) {
-        white-space: nowrap !important;
-        width: 130px !important;
-        min-width: 130px !important;
-    }
-    div[data-testid="stTable"] th:nth-child(2),
-    div[data-testid="stTable"] td:nth-child(2) {
-        white-space: nowrap !important;
-        width: 95px !important;
-    }
-    div[data-testid="stTable"] th:nth-child(3),
-    div[data-testid="stTable"] td:nth-child(3) {
-        white-space: nowrap !important;
-        padding-left: 14px !important;
-        min-width: 175px !important;
-    }
-    div[data-testid="stTable"] th:nth-child(4),
-    div[data-testid="stTable"] td:nth-child(4) {
-        min-width: 240px !important;
     }
 
 
