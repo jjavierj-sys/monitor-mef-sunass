@@ -919,7 +919,7 @@ else:
             if "SIAF" in df_gasto.columns:
                 match = df_gasto[df_gasto["SIAF"].astype(str).str.strip().str.lstrip("0") == num_siaf]
                 if not match.empty:
-                    r0 = match.iloc
+                    r0 = match.iloc[0]
                     return f"🔗 SIAF {num_siaf} -> {r0.get('Persona', '')} | {r0.get('Genérica', '')} (Rend: {r0.get('Exp.Rendición', '')})"
             return f"🔍 SIAF {num_siaf} detectado (no hallado en GASTO)"
 
@@ -946,7 +946,8 @@ else:
 
     if filas_ocultas:
         df_ocultos = pd.DataFrame(filas_ocultas)
-        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)      
+        df_pend_interes = pd.concat([df_ocultos, df_pend_interes], ignore_index=True)
+
     
     s1, s2 = st.columns(2)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
