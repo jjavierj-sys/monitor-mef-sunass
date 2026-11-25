@@ -24,6 +24,10 @@ st.markdown("""
         visibility: hidden !important;
     }
 
+    div[data-testid="stVerticalBlock"], div[data-testid="stHorizontalBlock"], div[data-testid="column"] {
+        transition: none !important;
+        animation: none !important;
+    }
 
     div[data-testid="stMetric"] {
         background-color: var(--secondary-background-color);
@@ -439,20 +443,13 @@ def guardar_dataframe_en_sheet(wb, nombre_hoja, df):
 # =====================================================================
 # NAVEGACIÓN PRINCIPAL (PRESUPUESTO MEF vs SIGED & GASTO)
 # =====================================================================
-modulo_activo = st.radio(
-    "Módulo",
-    ["💰 Presupuesto MEF", "📂 SIGED & Gasto"],
-    horizontal=True,
-    label_visibility="collapsed"
-)
-
-_limpiador_vista = st.empty()
-_limpiador_vista.empty()
+tab_mod_mef, tab_mod_siged = st.tabs(["💰 Presupuesto MEF", "📂 SIGED & Gasto"])
 
 # =====================================================================
 # MÓDULO 1: MONITOR PRESUPUESTAL MEF (INTACTO)
 # =====================================================================
-if modulo_activo == "💰 Presupuesto MEF":
+with tab_mod_mef:
+
 
     def mapear_unidad(meta):
         m = str(meta).strip()
@@ -801,7 +798,7 @@ if modulo_activo == "💰 Presupuesto MEF":
 # =====================================================================
 # MÓDULO 2: SIGED & PROGRAMACIÓN DE GASTO (CRUCE INTELIGENTE)
 # =====================================================================
-else:
+with tab_mod_siged:
     @st.cache_data(ttl=600)
     def leer_hoja_segura(nombre):
         wb = conectar_gsheets()
