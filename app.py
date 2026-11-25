@@ -958,6 +958,8 @@ with tab_mod_siged:
                                 "Asunto": asunto_ua,
                                 "Ubicación Área": area_ua,
                                 "Ubicación Persona": pers_ua,
+                                "Área": "UA",
+                                "Tipo": info_ua.get("Tipo", "Enviado"),
                                 "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
                             })
 
@@ -1024,6 +1026,30 @@ with tab_mod_siged:
         st.stop()
 
 
+    # Cálculo ejecutivo del día para el banner superior
+    hoy_str = pd.Timestamp.now(tz="America/Lima").strftime("%d/%m/%Y")
+    fec_otras_validas = df_otros_siged["Fecha_Creacion_DT"].dropna()
+    n_hoy_gasto = int((df_pend_gasto["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y") == hoy_str).sum()) if not df_pend_gasto.empty else 0
+    n_hoy_otros = int((fec_otras_validas.dt.strftime("%d/%m/%Y") == hoy_str).sum()) if not fec_otras_validas.empty else 0
+    total_hoy = n_hoy_gasto + n_hoy_otros
+
+    if total_hoy > 0:
+        msg_hoy = f"<b>{total_hoy} expedientes</b> generados hoy ({hoy_str}) para revisión o seguimiento."
+    else:
+        ult_f = fec_otras_validas.max().strftime("%d/%m/%Y") if not fec_otras_validas.empty else "sin fecha"
+        n_ult = int((fec_otras_validas.dt.strftime("%d/%m/%Y") == ult_f).sum()) if not fec_otras_validas.empty else 0
+        msg_hoy = f"Hoy aún sin ingresos nuevos; último corte (<b>{ult_f}</b>) tuvo <b>{n_ult} expedientes</b>."
+
+    color_b_sig = "#F59E0B" if len(df_pend_gasto) > 0 else "#10B981"
+    icono_b_sig = "📋" if len(df_pend_gasto) > 0 else "🌟"
+    st.markdown(f"""
+    <div style="background-color: var(--secondary-background-color); border-radius: 16px; padding: 14px 16px; margin: 4px 0 12px 0; border: 1px solid rgba(128,128,128,0.15); border-left: 5px solid {color_b_sig}; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <div style="font-size: 0.93rem;">
+            {icono_b_sig} Tienes <b>{len(df_pend_gasto)} expedientes de registro</b> en Gasto y {msg_hoy}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
     s2.metric("🆕 Pendientes GASTO", f"{len(df_pend_gasto):,}", "Rubros 01 a 05 por imputar")
@@ -1045,6 +1071,30 @@ with tab_mod_siged:
             return df_base[df_base["Fecha_Creacion_DT"].dt.strftime("%m/%Y") == mes_anio]
         return df_base[df_base["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y") == sel_fec]
 
+    def aplicar_filtro_origen(df_base, sel_orig):
+        if sel_orig == "Todas las áreas" or not sel_orig:
+            return df_base
+        if " | " in sel_orig:
+            ar, tp = [x.strip() for x in sel_orig.split("|", 1)]
+            m = pd.Series(True, index=df_base.index)
+            if "Área" in df_base.columns:
+                m &= df_base["Área"].astype(str).str.strip().str.upper() == ar.upper()
+            if "Tipo" in df_base.columns:
+                m &= df_base["Tipo"].astype(str).str.strip().str.capitalize() == tp.capitalize()
+            return df_base[m]
+        if "Área" in df_base.columns:
+            return df_base[df_base["Área"].astype(str).str.strip().str.upper() == sel_orig.upper()]
+        return df_base
+
+    opciones_origen = [
+        "Todas las áreas",
+        "DRE", "SDEM", "SRT", "UA",
+        "DRE | Recibido", "DRE | Enviado",
+        "SDEM | Recibido", "SDEM | Enviado",
+        "SRT | Recibido", "SRT | Enviado",
+        "UA | Recibido", "UA | Enviado"
+    ]
+
     t_bandeja, t_diario, t_gestion, t_vuelos, t_viaticos = st.tabs([
         "🆕 Bandeja GASTO (SIGED2)",
         "📅 Explorador Diario (Todos los demás)",
@@ -1059,19 +1109,24 @@ with tab_mod_siged:
             st.session_state.f_rubro_g = "Todos de GASTO"
         if "f_fec_g" not in st.session_state or st.session_state.f_fec_g not in opciones_fec_g:
             st.session_state.f_fec_g = "Todas las fechas"
+        if "f_orig_g" not in st.session_state:
+            st.session_state.f_orig_g = "Todas las áreas"
 
         def limpiar_bandeja_gasto():
             st.session_state.f_rubro_g = "Todos de GASTO"
             st.session_state.f_fec_g = "Todas las fechas"
+            st.session_state.f_orig_g = "Todas las áreas"
 
-        b1, b2, b3 = st.columns([1.6, 1.3, 1.1])
+        b1, b2, b3, b4 = st.columns([1.4, 1.1, 1.1, 0.9])
         with b1:
             f_rubro = st.selectbox("Concepto / Trámite", ["Todos de GASTO"] + rubros_gasto, key="f_rubro_g")
         with b2:
             sel_fec_g = st.selectbox("Fecha de creación", opciones_fec_g, key="f_fec_g")
         with b3:
+            sel_orig_g = st.selectbox("Área / Flujo", opciones_origen, key="f_orig_g")
+        with b4:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.button("🧹 Mostrar todos", on_click=limpiar_bandeja_gasto, use_container_width=True, key="btn_limp_g")
+            st.button("🧹 Limpiar", on_click=limpiar_bandeja_gasto, use_container_width=True, key="btn_limp_g")
 
         df_b = df_pend_gasto.copy()
         df_b["_orden_tg"] = pd.to_numeric(df_b["TIPO_GESTION"].astype(str).str.extract(r"^(\d+)")[0], errors="coerce").fillna(9999)
@@ -1080,6 +1135,7 @@ with tab_mod_siged:
         if f_rubro != "Todos de GASTO":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
         df_b = aplicar_filtro_fecha(df_b, sel_fec_g)
+        df_b = aplicar_filtro_origen(df_b, sel_orig_g)
 
         if df_b.empty:
             st.success("🎉 ¡Cero expedientes pendientes para los filtros seleccionados!")
@@ -1094,31 +1150,36 @@ with tab_mod_siged:
     with t_diario:
         tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
         opciones_fec_o = construir_opciones_fecha(df_otros_siged)
-        # Por defecto arranca en la fecha más reciente con información
         fec_default_o = opciones_fec_o[len([x for x in opciones_fec_o if x.startswith("Mes: ")]) + 1] if len(opciones_fec_o) > 2 else "Todas las fechas"
 
         if "f_tipo_o" not in st.session_state or st.session_state.f_tipo_o not in tipos_disp:
             st.session_state.f_tipo_o = "Todos los demás"
         if "f_fec_o" not in st.session_state or st.session_state.f_fec_o not in opciones_fec_o:
             st.session_state.f_fec_o = fec_default_o
+        if "f_orig_o" not in st.session_state:
+            st.session_state.f_orig_o = "Todas las áreas"
 
         def limpiar_explorador_otros():
             st.session_state.f_tipo_o = "Todos los demás"
             st.session_state.f_fec_o = "Todas las fechas"
+            st.session_state.f_orig_o = "Todas las áreas"
 
-        f1, f2, f3 = st.columns([1.6, 1.3, 1.1])
+        f1, f2, f3, f4 = st.columns([1.4, 1.1, 1.1, 0.9])
         with f1:
             f_tipo_otro = st.selectbox("Concepto / TIPO_GESTION", tipos_disp, key="f_tipo_o")
         with f2:
             sel_fec_o = st.selectbox("Fecha de creación", opciones_fec_o, key="f_fec_o")
         with f3:
+            sel_orig_o = st.selectbox("Área / Flujo", opciones_origen, key="f_orig_o")
+        with f4:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.button("🧹 Mostrar todos", on_click=limpiar_explorador_otros, use_container_width=True, key="btn_limp_o")
+            st.button("🧹 Limpiar", on_click=limpiar_explorador_otros, use_container_width=True, key="btn_limp_o")
 
         df_d = df_otros_siged.copy()
         if f_tipo_otro != "Todos los demás":
             df_d = df_d[df_d["TIPO_GESTION"] == f_tipo_otro]
         df_d = aplicar_filtro_fecha(df_d, sel_fec_o)
+        df_d = aplicar_filtro_origen(df_d, sel_orig_o)
 
         df_d["_orden_tg"] = pd.to_numeric(df_d["TIPO_GESTION"].astype(str).str.extract(r"^(\d+)")[0], errors="coerce").fillna(9999)
         df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "_orden_tg", "Número de registro"], ascending=[False, True, True])
@@ -1133,6 +1194,7 @@ with tab_mod_siged:
             cols_ver_d = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona"]
             cols_ver_d = [c for c in cols_ver_d if c in df_d_show.columns]
             st.table(df_d_show[cols_ver_d].set_index("Número de registro"))
+
 
     with t_gestion:
         res_tg = df_siged.groupby("TIPO_GESTION", as_index=False).agg(
