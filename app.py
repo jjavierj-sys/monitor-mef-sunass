@@ -47,19 +47,31 @@ st.markdown("""
         padding: 8px 8px !important;
     }
 
-    table td:nth-child(1), table th:nth-child(1) {
+    div[data-testid="stTable"] table {
+        table-layout: auto !important;
+        width: 100% !important;
+    }
+    div[data-testid="stTable"] th:nth-child(1),
+    div[data-testid="stTable"] td:nth-child(1) {
         white-space: nowrap !important;
-        min-width: 125px !important;
+        width: 130px !important;
+        min-width: 130px !important;
     }
-    table td:nth-child(2), table th:nth-child(2) {
+    div[data-testid="stTable"] th:nth-child(2),
+    div[data-testid="stTable"] td:nth-child(2) {
         white-space: nowrap !important;
+        width: 95px !important;
     }
-    table td:nth-child(3), table th:nth-child(3) {
-        min-width: 145px !important;
+    div[data-testid="stTable"] th:nth-child(3),
+    div[data-testid="stTable"] td:nth-child(3) {
+        width: 165px !important;
+        min-width: 165px !important;
     }
-    table td:nth-child(4), table th:nth-child(4) {
-        min-width: 230px !important;
+    div[data-testid="stTable"] th:nth-child(4),
+    div[data-testid="stTable"] td:nth-child(4) {
+        min-width: 240px !important;
     }
+
 
     div[data-baseweb="select"] input {
         caret-color: transparent !important;
