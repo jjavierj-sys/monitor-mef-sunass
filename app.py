@@ -881,7 +881,7 @@ else:
                             for cand in dict.fromkeys(candidatos):
                                 if cand in mapa_ua and cand not in exps_usados:
                                     asunto_cand = str(mapa_ua[cand].get("Asunto", "")).lower()
-                                    if any(k in asunto_cand for k in ["solicitud de pago", "pasaje", "boleto", "aereo", "aéreo"]):
+                                    if ("electronica" in asunto_cand or "electrónica" in asunto_cand) and ("solicitud de pago" in asunto_cand or "orden de servicio" in asunto_cand):
                                         fec_cand = pd.to_datetime(mapa_ua[cand].get("Fecha de creación", None), dayfirst=True, errors="coerce")
                                         if pd.notna(fec_orig) and pd.notna(fec_cand) and fec_cand.date() < fec_orig.date():
                                             continue
