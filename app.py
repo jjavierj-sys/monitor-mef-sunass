@@ -858,7 +858,7 @@ else:
 
     exps_usados = set(exps_gasto_set)
     if not df_anulados.empty:
-        col_anul = df_anulados.columns
+        col_anul = df_anulados.columns[0]
         vals_a = df_anulados[col_anul].dropna().astype(str).str.strip().str.upper()
         exps_usados.update(v for v in vals_a if v.startswith("202"))
 
@@ -889,7 +889,7 @@ else:
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc.get('Persona', '')})"
+                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
 
                         filas_ocultas.append({
                             "Número de registro": exp_citado,
