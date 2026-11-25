@@ -147,16 +147,7 @@ def clasificar_subtipo_tecnico(txt):
 def clasificar_tipo_gestion(row):
     import unicodedata
     txt = str(row.get("Asunto", "")).lower()
-    asunto_low = " ".join("".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn").split())
-
-    if ("tdr" in asunto_low or "terminos de referencia" in asunto_low) and any(w in asunto_low for w in ["revision", "opinion", "observacion", "subsanacion"]):
-        return "07. REVISIÓN DE TDR"
-    if any(k in asunto_low for k in ["cuadro multianual", "cmn"]):
-        return "06. CMN"
-    if any(k in asunto_low for k in ["modificacion presupuestal", "nota modificatoria", "notas modificatorias", "habilitacion presupuestal"]):
-        return "08. PRESUPUESTO"
-    if any(k in asunto_low for k in ["certificacion", "ccp", "ampliacion presupuestal", "rebaja de"]) or ("ampliacion" in asunto_low and "pasaje" in asunto_low):
-        return "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA"
+    txt_norm = " ".join("".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn").split())
 
     areaH = str(row.get("Área remitente", "")).lower()
     areaE = str(row.get("Ubicación Área", "")).lower()
@@ -212,8 +203,8 @@ def clasificar_tipo_gestion(row):
     )
     esPresupuesto = (
         any(k in txt for k in ["presupuest", "certificacion", "certificación", "ejecucion", "rebaja", "certificado", "ccp"])
-        and not any(e in txt for e in ["seguimiento", "mef", "macrofiscal", "inventario", "tarifa", "cuota", "inversiones"])
-    )
+        or ("ampliacion" in txt_norm and "pasaje" in txt_norm)
+    ) and not any(k in txt for k in ["seguimiento", "mef", "macrofiscal", "inventario", "tarifa", "cuota", "inversiones"])
 
     if esPasaje and not esPresupuesto:
         return "01. PASAJES", subtipo
@@ -981,32 +972,17 @@ else:
         "03. RENDICIONES", "03. RENDICIONES PAGADAS",
         "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
-    rubros_presupuesto = [
-        "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA",
-        "07. REVISIÓN DE TDR",
-        "08. PRESUPUESTO / MODIFICACIONES",
-        "09. CMN"
-    ]
-
-    df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
-    if not df_pend_gasto.empty:
-        df_pend_gasto["Sugerencia_GASTO"] = df_pend_gasto.apply(sugerir_imputacion, axis=1)
-    if filas_ocultas:
-        df_ocultos = pd.DataFrame(filas_ocultas)
-        df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
-
-    df_pend_presup = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_presupuesto)].copy()
-    if not df_pend_presup.empty:
-        df_pend_presup["Sugerencia_GASTO"] = "📑 Registrar en fila de control presupuestal (CCP / Modificación / CMN / TDR)"
+    df_otros_siged = df_siged[~df_siged["TIPO_GESTION"].isin(rubros_gasto)].copy()
+    df_otros_siged["Fecha_Creacion_DT"] = pd.to_datetime(df_otros_siged["Fecha de creación"], dayfirst=True, errors="coerce")
 
     s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
-    s2.metric("🆕 Pendientes GASTO", f"{len(df_pend_gasto):,}", "Para devengue / ejecución")
-    s3.metric("📑 Pendientes PRESUPUESTO", f"{len(df_pend_presup):,}", "Certif. / Modif. / CMN / TDR")
+    s2.metric("🆕 Pendientes GASTO", f"{len(df_pend_gasto):,}", "Rubros 01 a 05 por imputar")
+    s3.metric("📅 Otros / Presupuesto / Técnico", f"{len(df_otros_siged):,}", "Explorador por fecha")
 
-    t_bandeja, t_presup, t_gestion, t_vuelos, t_viaticos = st.tabs([
+    t_bandeja, t_diario, t_gestion, t_vuelos, t_viaticos = st.tabs([
         "🆕 Bandeja GASTO (SIGED2)",
-        "📑 Bandeja PRESUPUESTO / CMN / TDR",
+        "📅 Explorador Diario (Todos los demás)",
         "📊 Por Tipo de Gestión",
         "✈️ Vuelos (USD/PEN)",
         "🧳 Viáticos y Rendiciones"
@@ -1025,19 +1001,53 @@ else:
             cols_ver = [c for c in cols_ver if c in df_b.columns]
             st.table(df_b[cols_ver].set_index("Número de registro"))
 
-    with t_presup:
-        f_pres = st.selectbox("Filtrar trámite presupuestal / CMN / TDR", ["Todos de Presupuesto"] + rubros_presupuesto)
-        df_p_view = df_pend_presup.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
-        if f_pres != "Todos de Presupuesto":
-            df_p_view = df_p_view[df_p_view["TIPO_GESTION"] == f_pres]
+    with t_diario:
+        f1, f2, f3 = st.columns([1.2, 1.3, 1.5])
+        with f1:
+            modo_fecha = st.selectbox("Ventana de fecha", ["Hoy", "Ayer", "Últimos 7 días", "Rango personalizado", "Todo el año"])
+        hoy_lima = pd.Timestamp.now().normalize()
+        with f2:
+            if modo_fecha == "Hoy":
+                f_ini, f_fin = hoy_lima, hoy_lima
+                st.caption(f"Mostrando: {hoy_lima.strftime('%d/%m/%Y')}")
+            elif modo_fecha == "Ayer":
+                ayer_lima = hoy_lima - pd.Timedelta(days=1)
+                f_ini, f_fin = ayer_lima, ayer_lima
+                st.caption(f"Mostrando: {ayer_lima.strftime('%d/%m/%Y')}")
+            elif modo_fecha == "Últimos 7 días":
+                f_ini, f_fin = hoy_lima - pd.Timedelta(days=7), hoy_lima
+                st.caption(f"Del {f_ini.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')}")
+            elif modo_fecha == "Rango personalizado":
+                rango = st.date_input("Selecciona fechas", [hoy_lima - pd.Timedelta(days=3), hoy_lima])
+                if len(rango) == 2:
+                    f_ini, f_fin = pd.Timestamp(rango[0]), pd.Timestamp(rango[1])
+                else:
+                    f_ini = f_fin = pd.Timestamp(rango[0])
+            else:
+                f_ini, f_fin = pd.Timestamp("2020-01-01"), pd.Timestamp("2099-12-31")
+                st.caption("Mostrando todo el año")
 
-        if df_p_view.empty:
-            st.success("🎉 ¡Cero expedientes pendientes de Certificación, Modificación, CMN o TDR!")
+        with f3:
+            tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().unique().tolist())
+            f_tipo_otro = st.selectbox("Filtrar por TIPO_GESTION", tipos_disp)
+
+        df_d = df_otros_siged[
+            (df_otros_siged["Fecha_Creacion_DT"].dt.normalize() >= f_ini) &
+            (df_otros_siged["Fecha_Creacion_DT"].dt.normalize() <= f_fin)
+        ].copy()
+
+        if f_tipo_otro != "Todos los demás":
+            df_d = df_d[df_d["TIPO_GESTION"] == f_tipo_otro]
+
+        df_d = df_d.sort_values(by=["Fecha_Creacion_DT", "TIPO_GESTION", "Número de registro"], ascending=[False, True, True])
+
+        if df_d.empty:
+            st.info("No ingresaron expedientes de estas categorías en la fecha seleccionada.")
         else:
-            cols_ver_p = ["Número de registro", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
-            cols_ver_p = [c for c in cols_ver_p if c in df_p_view.columns]
-            st.table(df_p_view[cols_ver_p].set_index("Número de registro"))
-
+            st.caption(f"Mostrando **{len(df_d)}** expedientes encontrados.")
+            cols_ver_d = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona"]
+            cols_ver_d = [c for c in cols_ver_d if c in df_d.columns]
+            st.table(df_d[cols_ver_d].set_index("Número de registro"))
 
     with t_gestion:
         res_tg = df_siged.groupby("TIPO_GESTION", as_index=False).agg(
@@ -1079,7 +1089,7 @@ else:
     buf_siged = io.BytesIO()
     with pd.ExcelWriter(buf_siged, engine='openpyxl') as writer:
         df_pend_gasto.to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
-        df_pend_presup.to_excel(writer, index=False, sheet_name='Pendientes_PRESUPUESTO')
+        df_otros_siged.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Otros_SIGED')
         df_siged.to_excel(writer, index=False, sheet_name='SIGED_Completo')
         if not df_gasto.empty:
             df_gasto.to_excel(writer, index=False, sheet_name='GASTO')
