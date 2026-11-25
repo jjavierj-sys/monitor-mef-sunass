@@ -973,19 +973,29 @@ else:
         "04. ENTREGABLE", "05. CONTRATACIONES", "05. EL PERUANO"
     ]
 
+    def parsear_fecha_siged(serie):
+        return serie.apply(
+            lambda x: pd.to_datetime(x, unit="D", origin="1899-12-30")
+            if isinstance(x, (int, float)) and x > 20000
+            else pd.to_datetime(str(x).strip(), dayfirst=True, errors="coerce")
+        )
+
     df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
     if not df_pend_gasto.empty:
         df_pend_gasto["Sugerencia_GASTO"] = df_pend_gasto.apply(sugerir_imputacion, axis=1)
     if filas_ocultas:
         df_ocultos = pd.DataFrame(filas_ocultas)
+        if "Fecha de creación" not in df_ocultos.columns:
+            df_ocultos["Fecha de creación"] = pd.Timestamp.now(tz="America/Lima").strftime("%d/%m/%Y")
         df_pend_gasto = pd.concat([df_ocultos, df_pend_gasto], ignore_index=True)
 
+    if not df_pend_gasto.empty and "Fecha de creación" in df_pend_gasto.columns:
+        df_pend_gasto["Fecha_Creacion_DT"] = parsear_fecha_siged(df_pend_gasto["Fecha de creación"])
+    else:
+        df_pend_gasto["Fecha_Creacion_DT"] = pd.NaT
+
     df_otros_siged = df_siged[~df_siged["TIPO_GESTION"].isin(rubros_gasto)].copy()
-    df_otros_siged["Fecha_Creacion_DT"] = df_otros_siged["Fecha de creación"].apply(
-        lambda x: pd.to_datetime(x, unit="D", origin="1899-12-30")
-        if isinstance(x, (int, float)) and x > 20000
-        else pd.to_datetime(str(x).strip(), dayfirst=True, errors="coerce")
-    )
+    df_otros_siged["Fecha_Creacion_DT"] = parsear_fecha_siged(df_otros_siged["Fecha de creación"])
 
     s1, s2, s3 = st.columns(3)
     s1.metric("📥 Expedientes SIGED", f"{len(df_siged):,}")
@@ -1000,32 +1010,45 @@ else:
         "🧳 Viáticos y Rendiciones"
     ])
 
+    hoy_lima = pd.Timestamp.now(tz="America/Lima").date()
+
     with t_bandeja:
-        f_rubro = st.selectbox("Filtrar trámite de GASTO pendiente", ["Todos de GASTO"] + rubros_gasto)
+        b1, b2, b3 = st.columns([1.4, 1.2, 1.4])
+        with b1:
+            f_rubro = st.selectbox("Filtrar trámite de GASTO", ["Todos de GASTO"] + rubros_gasto)
+        with b2:
+            dia_gasto = st.date_input("Día de creación", value=hoy_lima, key="dia_gasto")
+        with b3:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            sin_filtro_fec_gasto = st.checkbox("Quitar filtro de fecha", value=True, key="quitar_fec_gasto")
+
         df_b = df_pend_gasto.sort_values(by=["TIPO_GESTION", "Número de registro"]).copy()
         if f_rubro != "Todos de GASTO":
             df_b = df_b[df_b["TIPO_GESTION"] == f_rubro]
+        if not sin_filtro_fec_gasto:
+            df_b = df_b[df_b["Fecha_Creacion_DT"].dt.date == dia_gasto]
 
         if df_b.empty:
-            st.success("🎉 ¡Cero expedientes pendientes por imputar en GASTO!")
+            st.success("🎉 ¡Cero expedientes pendientes para los filtros seleccionados!")
         else:
-            cols_ver = ["Número de registro", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
-            cols_ver = [c for c in cols_ver if c in df_b.columns]
-            st.table(df_b[cols_ver].set_index("Número de registro"))
+            df_b_show = df_b.copy()
+            df_b_show["Fecha de creación"] = df_b_show["Fecha_Creacion_DT"].dt.strftime("%d/%m/%Y").fillna("")
+            cols_ver = ["Número de registro", "Fecha de creación", "TIPO_GESTION", "Asunto", "Ubicación Área", "Ubicación Persona", "Sugerencia_GASTO"]
+            cols_ver = [c for c in cols_ver if c in df_b_show.columns]
+            st.table(df_b_show[cols_ver].set_index("Número de registro"))
 
     with t_diario:
-        hoy_lima = pd.Timestamp.now(tz="America/Lima").date()
-        f1, f2, f3 = st.columns([1.2, 1.3, 1.5])
+        f1, f2, f3 = st.columns([1.2, 1.4, 1.4])
         with f1:
-            dia_sel = st.date_input("Día de creación", value=hoy_lima)
+            dia_sel = st.date_input("Día de creación", value=hoy_lima, key="dia_otros")
         with f2:
             tipos_disp = ["Todos los demás"] + sorted(df_otros_siged["TIPO_GESTION"].dropna().astype(str).unique().tolist())
             f_tipo_otro = st.selectbox("Filtrar por TIPO_GESTION", tipos_disp)
         with f3:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            ver_todo_anio = st.checkbox("Mostrar todo el año (sin filtro de día)", value=False)
+            sin_filtro_fec_otros = st.checkbox("Quitar filtro de fecha", value=False, key="quitar_fec_otros")
 
-        if ver_todo_anio:
+        if sin_filtro_fec_otros:
             df_d = df_otros_siged.copy()
         else:
             df_d = df_otros_siged[df_otros_siged["Fecha_Creacion_DT"].dt.date == dia_sel].copy()
@@ -1084,7 +1107,7 @@ else:
 
     buf_siged = io.BytesIO()
     with pd.ExcelWriter(buf_siged, engine='openpyxl') as writer:
-        df_pend_gasto.to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
+        df_pend_gasto.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Pendientes_GASTO')
         df_otros_siged.drop(columns=["Fecha_Creacion_DT"], errors="ignore").to_excel(writer, index=False, sheet_name='Otros_SIGED')
         df_siged.to_excel(writer, index=False, sheet_name='SIGED_Completo')
         if not df_gasto.empty:
