@@ -869,11 +869,10 @@ else:
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
-                        if len(partes) == 3 and len(partes) == 5:
-                            candidatos = [f"{partes}-{partes}-{partes}{d}" for d in range(10)]
-                            candidatos.append(f"{partes}-{partes}-0{partes}")
+                        if len(partes) == 3 and len(partes[2]) == 5:
+                            candidatos = [f"{partes[0]}-{partes[1]}-{partes[2]}{d}" for d in range(10)]
+                            candidatos.append(f"{partes[0]}-{partes[1]}-0{partes[2]}")
                             for cand in candidatos:
-                                # Solo aceptar candidatos que existan en UA y que NO estén ya usados en GASTO
                                 if cand in mapa_ua and cand not in exps_usados:
                                     exp_resuelto = cand
                                     info_ua = mapa_ua[cand]
