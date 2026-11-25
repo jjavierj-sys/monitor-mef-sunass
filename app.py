@@ -147,16 +147,15 @@ def clasificar_subtipo_tecnico(txt):
 def clasificar_tipo_gestion(row):
     import unicodedata
     txt = str(row.get("Asunto", "")).lower()
-    asunto_low = "".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn")
+    asunto_low = " ".join("".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn").split())
 
-    # Reglas previas sin tildes (captura con o sin tilde automáticamente)
-    if any(k in asunto_low for k in ["revision de tdr", "revision del tdr", "opinion tecnica de tdr", "revision de terminos de referencia"]):
+    if ("tdr" in asunto_low or "terminos de referencia" in asunto_low) and any(w in asunto_low for w in ["revision", "opinion", "observacion", "subsanacion"]):
         return "07. REVISIÓN DE TDR"
-    if any(k in asunto_low for k in ["cuadro multianual", "cmn", "inclusion en el cmn", "exclusion del cmn"]):
-        return "09. CMN"
+    if any(k in asunto_low for k in ["cuadro multianual", "cmn"]):
+        return "06. CMN"
     if any(k in asunto_low for k in ["modificacion presupuestal", "nota modificatoria", "notas modificatorias", "habilitacion presupuestal"]):
-        return "08. PRESUPUESTO / MODIFICACIONES"
-    if any(k in asunto_low for k in ["certificacion", "ccp", "ampliacion de pasajes", "ampliacion presupuestal", "rebaja de certificacion", "rebaja de ccp", "ampliacion de ccp"]):
+        return "08. PRESUPUESTO"
+    if any(k in asunto_low for k in ["certificacion", "ccp", "ampliacion presupuestal", "rebaja de"]) or ("ampliacion" in asunto_low and "pasaje" in asunto_low):
         return "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA"
 
     areaH = str(row.get("Área remitente", "")).lower()
@@ -984,9 +983,9 @@ else:
     ]
     rubros_presupuesto = [
         "06. CERTIFICACIÓN / AMPLIACIÓN / REBAJA",
+        "06. CMN",
         "07. REVISIÓN DE TDR",
-        "08. PRESUPUESTO / MODIFICACIONES",
-        "09. CMN"
+        "08. PRESUPUESTO"
     ]
 
     df_pend_gasto = df_pendientes[df_pendientes["TIPO_GESTION"].isin(rubros_gasto)].copy()
