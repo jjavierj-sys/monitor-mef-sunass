@@ -869,15 +869,14 @@ else:
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
-                        if len(partes) == 3 and len(partes) == 5:
-                            cand_izq = f"{partes}-{partes}-0{partes}"
-                            cand_der = f"{partes}-{partes}-{partes}0"
-                            if cand_izq in mapa_ua:
-                                exp_resuelto = cand_izq
-                                info_ua = mapa_ua[cand_izq]
-                            elif cand_der in mapa_ua:
-                                exp_resuelto = cand_der
-                                info_ua = mapa_ua[cand_der]
+                        if len(partes) == 3 and len(partes[2]) == 5:
+                            candidatos = [f"{partes[0]}-{partes[1]}-{partes[2]}{d}" for d in range(10)]
+                            candidatos.append(f"{partes[0]}-{partes[1]}-0{partes[2]}")
+                            for cand in candidatos:
+                                if cand in mapa_ua:
+                                    exp_resuelto = cand
+                                    info_ua = mapa_ua[cand]
+                                    break
 
                     if exp_resuelto not in exps_usados and exp_resuelto not in exps_ya_en_pend:
                         exps_ya_en_pend.add(exp_resuelto)
