@@ -869,14 +869,26 @@ else:
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
                         partes = exp_citado.split("-")
-                        if len(partes) == 3 and len(partes[2]) == 5:
-                            candidatos = [f"{partes[0]}-{partes[1]}-{partes[2]}{d}" for d in range(10)]
-                            candidatos.append(f"{partes[0]}-{partes[1]}-0{partes[2]}")
-                            for cand in candidatos:
+                        if len(partes) == 3 and len(partes) == 5:
+                            num5 = partes
+                            # Generar candidatos insertando 0-9 en cualquier posición (pos 1 a 5) y 0 al inicio
+                            candidatos = [f"{partes}-{partes}-0{num5}"]
+                            for pos in range(1, 6):
+                                for d in range(10):
+                                    cand_num = num5[:pos] + str(d) + num5[pos:]
+                                    candidatos.append(f"{partes}-{partes}-{cand_num}")
+
+                            fec_orig = pd.to_datetime(r_orig.get("Fecha de creación", None), dayfirst=True, errors="coerce")
+                            for cand in dict.fromkeys(candidatos):
                                 if cand in mapa_ua and cand not in exps_usados:
-                                    exp_resuelto = cand
-                                    info_ua = mapa_ua[cand]
-                                    break
+                                    asunto_cand = str(mapa_ua[cand].get("Asunto", "")).lower()
+                                    if any(k in asunto_cand for k in ["solicitud de pago", "pasaje", "boleto", "aereo", "aéreo"]):
+                                        fec_cand = pd.to_datetime(mapa_ua[cand].get("Fecha de creación", None), dayfirst=True, errors="coerce")
+                                        if pd.notna(fec_orig) and pd.notna(fec_cand) and fec_cand.date() < fec_orig.date():
+                                            continue
+                                        exp_resuelto = cand
+                                        info_ua = mapa_ua[cand]
+                                        break
 
                     if exp_resuelto not in exps_usados and exp_resuelto not in exps_ya_en_pend:
                         exps_ya_en_pend.add(exp_resuelto)
