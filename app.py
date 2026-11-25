@@ -851,9 +851,16 @@ else:
     filas_ocultas = []
     if "Observación" in df_siged.columns:
         mapa_ua = {}
+        candidatos_ua_os = []
         if not df_ua.empty and "Número de registro" in df_ua.columns:
             for _, rua in df_ua.iterrows():
-                mapa_ua[str(rua["Número de registro"]).strip().upper()] = rua.to_dict()
+                d_ua = rua.to_dict()
+                reg_ua = str(d_ua.get("Número de registro", "")).strip().upper()
+                mapa_ua[reg_ua] = d_ua
+                asu_ua = str(d_ua.get("Asunto", "")).lower()
+                if reg_ua not in exps_usados and ("electronica" in asu_ua or "electrónica" in asu_ua) and ("solicitud de pago" in asu_ua or "orden de servicio" in asu_ua):
+                    fec_ua = pd.to_datetime(d_ua.get("Fecha de creación", None), dayfirst=True, errors="coerce")
+                    candidatos_ua_os.append((reg_ua, fec_ua, d_ua.get("Asunto", ""), d_ua.get("Ubicación Persona", "")))
 
         exps_ya_en_pend = set(df_pendientes["Número de registro"])
         for _, r_orig in df_siged.iterrows():
@@ -864,7 +871,6 @@ else:
                     if exp_citado == exp_orig:
                         continue
 
-                    # 1. Búsqueda exacta y variantes flexibles si tiene 5 dígitos (ej. 2026-I01-01314 -> 001314 o 013140)
                     exp_resuelto = exp_citado
                     info_ua = mapa_ua.get(exp_citado, {})
                     if len(info_ua) == 0 and len(mapa_ua) > 0:
@@ -894,11 +900,35 @@ else:
                         asunto_ua = info_ua.get("Asunto", f"Expediente generado desde observación de {exp_orig}")
                         area_ua = info_ua.get("Ubicación Área", "UA / Tesorería")
                         pers_ua = info_ua.get("Ubicación Persona", "")
+
                         pers_gasto = ""
+                        sugerencia_fechas = ""
                         if not df_gasto.empty and "Exp.Solicitud" in df_gasto.columns:
                             m_g = df_gasto[df_gasto["Exp.Solicitud"].astype(str).str.strip().str.upper() == exp_orig]
                             if not m_g.empty:
-                                pers_gasto = f" ({m_g.iloc[0].get('Persona', '')})"
+                                rg0 = m_g.iloc[0]
+                                pers_gasto = f" ({rg0.get('Persona', '')})"
+
+                                # Si no se encontró el expediente exacto/combinatorio, sugerir OS Electrónicas libres por fechas de GASTO
+                                if len(info_ua) == 0 and candidatos_ua_os:
+                                    fechas_ref = []
+                                    for col_f in ["Fech.Trámite", "Fech.Inicio", "Fech.Fin", "Fech.Venc."]:
+                                        val_f = rg0.get(col_f, None)
+                                        if isinstance(val_f, (int, float)) and val_f > 20000:
+                                            fechas_ref.append(pd.to_datetime(val_f, unit="D", origin="1899-12-30"))
+                                        elif val_f:
+                                            dt_f = pd.to_datetime(val_f, dayfirst=True, errors="coerce")
+                                            if pd.notna(dt_f):
+                                                fechas_ref.append(dt_f)
+                                    if fechas_ref:
+                                        f_min = min(fechas_ref) - pd.Timedelta(days=2)
+                                        f_max = max(fechas_ref) + pd.Timedelta(days=12)
+                                        cands_fec = []
+                                        for c_reg, c_fec, c_asu, c_pers in candidatos_ua_os:
+                                            if pd.notna(c_fec) and f_min.date() <= c_fec.date() <= f_max.date():
+                                                cands_fec.append(f"• {c_reg} ({c_fec.strftime('%d/%m')}): {c_asu[:45]} [{c_pers}]")
+                                        if cands_fec:
+                                            sugerencia_fechas = "\n🔎 Posibles OS Electrónicas por fecha:\n" + "\n".join(cands_fec[:5])
 
                         nota_flex = f" [Corregido desde {exp_citado}]" if exp_resuelto != exp_citado else ""
                         filas_ocultas.append({
@@ -907,8 +937,9 @@ else:
                             "Asunto": asunto_ua,
                             "Ubicación Área": area_ua,
                             "Ubicación Persona": pers_ua,
-                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]})"
+                            "Sugerencia_GASTO": f"✈️ Asociado a solicitud {exp_orig}{pers_gasto}{nota_flex} -> Registrar en Exp.Devengado (Obs: {obs[:80]}){sugerencia_fechas}"
                         })
+
 
     def sugerir_imputacion(row):
         asunto = str(row.get("Asunto", ""))
